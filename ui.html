@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPAM Tracker</title>
+<style>
+  /* ------------------------------------------------------------ jetons */
+  :root {
+    --ink: #0a0c11; --ink-2: #10131b; --felt: #141823; --felt-2: #1a1f2c;
+    --hair: rgba(236, 222, 186, .09); --hair-2: rgba(236, 222, 186, .16);
+    --paper: #ece6d6; --muted: #8f8a7d; --faint: #5d5a52;
+    --brass: #d8b46a; --brass-dim: #8f774a;
+    --win: #6fdc9c; --loss: #ff6b57; --draw: #b3ad9f;
+    --fire: #ff6a3d; --water: #3ea6ff; --earth: #c99a5b; --nature: #6ccf5a;
+    --light: #ffd75e; --shadow: #a274ff; --divine: #f3efe6;
+    --display: "Bahnschrift", "DIN Alternate", "Arial Narrow", sans-serif;
+    --serif: "Sitka Heading", "Sitka Text", "Sitka", Georgia, serif;
+    --rail: 78px;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  :root { color-scheme: dark; --thumb: #2b2e37; }
+
+  /* ------------------------------------------------------------ barres de defilement
+     Page entiere et tout conteneur qui defile (le selecteur * couvre tableaux, listes, panneaux).
+     Chromium/WebView2 ignore ::-webkit-scrollbar des que scrollbar-width/scrollbar-color
+     s'appliquent : la base standard est donc reservee aux moteurs sans ::-webkit-scrollbar. */
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--thumb) transparent; }
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--thumb); border-radius: 10px;
+    border: 2px solid transparent; background-clip: padding-box; /* pouce plus fin que la piste */
+    min-height: 40px;
+  }
+  *::-webkit-scrollbar-thumb:hover, *::-webkit-scrollbar-thumb:active {
+    background-color: var(--brass); border-width: 1.5px;
+  }
+  *::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+  body {
+    background: var(--ink); color: var(--paper);
+    font: 350 14.5px/1.5 var(--display); letter-spacing: .1px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* grain + halo de table, fixes derriere tout */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(1200px 600px at 70% -10%, color-mix(in srgb, var(--res, var(--brass)) 13%, transparent), transparent 70%),
+      radial-gradient(900px 700px at 0% 110%, rgba(216, 180, 106, .06), transparent 70%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .95  0 0 0 0 .85  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    transition: background 1s;
+  }
+  ::selection { background: var(--brass); color: var(--ink); }
+  .cond { font-family: var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; }
+
+  /* ------------------------------------------------------------ rail */
+  .rail {
+    position: fixed; inset: 0 auto 0 0; width: var(--rail); z-index: 5;
+    display: flex; flex-direction: column; align-items: center; padding: 18px 0 16px;
+    border-right: 1px solid var(--hair);
+    background: linear-gradient(180deg, rgba(16, 19, 27, .92), rgba(10, 12, 17, .92));
+    backdrop-filter: blur(6px);
+  }
+  .mono {
+    width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 26px;
+    border: 1px solid var(--brass-dim); transform: rotate(45deg); border-radius: 6px;
+  }
+  .mono span { transform: rotate(-45deg); color: var(--brass); font: 700 19px var(--display); }
+  .rail nav { display: flex; flex-direction: column; gap: 6px; }
+  .rail nav button {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    background: none; border: 0; cursor: pointer; padding: 14px 10px; position: relative;
+    color: var(--muted); font: 600 12px var(--display); letter-spacing: 2.6px; text-transform: uppercase;
+    transition: color .25s;
+  }
+  .rail nav button::after {
+    content: ""; position: absolute; right: -1px; top: 18%; bottom: 18%; width: 2px; border-radius: 2px;
+    background: var(--brass); transform: scaleY(0); transition: transform .35s var(--ease);
+  }
+  .rail nav button:hover { color: var(--paper); }
+  .rail nav button[aria-selected="true"] { color: var(--brass); }
+  .rail nav button[aria-selected="true"]::after { transform: scaleY(1); }
+  .rail nav button:focus-visible { outline: 1px dashed var(--brass-dim); outline-offset: -4px; }
+  .live { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--faint); font-size: 10.5px; letter-spacing: 1px; text-align: center; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--win); box-shadow: 0 0 0 0 var(--win);
+    animation: pulse 2.4s infinite; }
+  .live.off i { background: var(--loss); animation: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(111, 220, 156, .5); } 70%, 100% { box-shadow: 0 0 0 9px rgba(111, 220, 156, 0); } }
+
+  /* ------------------------------------------------------------ mise en page */
+  main { margin-left: var(--rail); padding: 26px clamp(18px, 3vw, 44px) 60px; max-width: 1320px;
+    overflow-x: clip; /* la donne part du centre : jamais de barre horizontale pendant l'animation */ }
+  section[hidden] { display: none; }
+  section.enter { animation: rise .45s var(--ease) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  .kicker { font: 600 11px var(--display); letter-spacing: 3px; text-transform: uppercase; color: var(--brass); }
+  h2.title {
+    display: flex; align-items: baseline; gap: 14px; margin: 46px 0 18px;
+    font: 600 30px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+  h2.title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--hair-2), transparent); }
+  h2.title small { font: italic 400 15px var(--serif); text-transform: none; color: var(--muted); letter-spacing: 0; }
+  .banner {
+    display: flex; gap: 12px; align-items: baseline; padding: 11px 16px; margin-bottom: 12px;
+    border-left: 2px solid var(--brass); background: linear-gradient(90deg, rgba(216, 180, 106, .10), transparent 80%);
+    color: var(--paper);
+  }
+  .banner b { color: var(--brass); font-weight: 600; letter-spacing: 1.5px; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
+  code { font-family: Consolas, monospace; font-size: 12.5px; color: var(--brass); }
+  .muted { color: var(--muted); }
+  .serif { font-family: var(--serif); }
+  .empty { padding: 26px 4px; color: var(--muted); font: italic 16px var(--serif); }
+
+  /* ------------------------------------------------------------ cartes */
+  .card {
+    --w: 120px; --el: var(--brass-dim);
+    position: relative; width: var(--w); aspect-ratio: 200 / 285; flex: none;
+    border-radius: calc(var(--w) * .07); padding: 2px; isolation: isolate;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--el) 95%, white 5%), color-mix(in srgb, var(--el) 45%, #000) 70%);
+    box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .5),
+                0 14px 30px -18px color-mix(in srgb, var(--el) 70%, transparent);
+    transition: transform .35s var(--ease), box-shadow .35s var(--ease);
+    outline: none;
+  }
+  .card > .face { position: absolute; inset: 2px; border-radius: inherit; overflow: hidden; background: var(--ink-2); }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* filet interieur facon carte imprimee */
+  .card > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), inset 0 -40px 40px -30px rgba(0, 0, 0, .55); }
+  .card:hover, .card:focus-visible { transform: translateY(-6px) rotate(-1deg); z-index: 3;
+    box-shadow: 0 22px 34px -14px rgba(0, 0, 0, .95), 0 0 0 1px rgba(0, 0, 0, .5),
+                0 18px 40px -14px color-mix(in srgb, var(--el) 85%, transparent); }
+  /* repere de rarete : gemme en haut a droite */
+  .gem { position: absolute; top: calc(var(--w) * .045); right: calc(var(--w) * .045); z-index: 2;
+    width: clamp(7px, calc(var(--w) * .1), 15px); aspect-ratio: 1; background: var(--g, #9b978c);
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, .9)); }
+  .r-common .gem { --g: #a8a397; clip-path: circle(42%); }
+  .r-rare .gem { --g: #7fb4ff; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  .r-epic .gem { --g: #c58bff; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    filter: drop-shadow(0 0 4px #c58bff); }
+  .r-legendary .gem, .r-divine .gem {
+    clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+  .r-legendary .gem { --g: #ffcf5a; filter: drop-shadow(0 0 4px #ffcf5a); }
+  .r-divine .gem { --g: #fff; filter: drop-shadow(0 0 5px #fff); }
+  /* reflet holographique sur les cartes legendaires et divines */
+  .r-legendary > .face::before, .r-divine > .face::before {
+    content: ""; position: absolute; inset: -40%; z-index: 1; pointer-events: none; mix-blend-mode: color-dodge; opacity: 0;
+    background: linear-gradient(115deg, transparent 38%, rgba(255, 220, 140, .55) 48%, rgba(140, 200, 255, .45) 54%, transparent 64%);
+    transform: translateX(-30%); transition: opacity .3s;
+  }
+  .r-legendary:hover > .face::before, .r-divine:hover > .face::before { opacity: 1; animation: sheen 1.4s var(--ease) both; }
+  @keyframes sheen { to { transform: translateX(30%); } }
+  /* carte de remplacement quand l'image manque */
+  .ph { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end;
+    padding: calc(var(--w) * .09); text-align: left;
+    background:
+      radial-gradient(circle at 70% 25%, color-mix(in srgb, var(--el) 45%, transparent), transparent 60%),
+      linear-gradient(165deg, color-mix(in srgb, var(--el) 28%, #12151e), #0b0d13 75%); }
+  .ph .glyph { position: absolute; top: 8%; left: 10%; font: 700 calc(var(--w) * .5)/1 var(--serif);
+    color: color-mix(in srgb, var(--el) 60%, transparent); opacity: .5; }
+  .ph .nm { font: 600 calc(var(--w) * .11)/1.1 var(--serif); color: var(--paper); position: relative; }
+  .ph .uid { font: calc(var(--w) * .075) Consolas, monospace; color: var(--brass); }
+  /* tailles */
+  .card.xl { --w: clamp(96px, 9.4vw, 142px); }
+  .card.md { --w: 112px; }
+  .card.sm { --w: 82px; }
+  .card.xs { --w: 34px; border-radius: 4px; padding: 1.5px; }
+  .card.xs .gem { display: none; }
+  .card.xs:hover { transform: translateY(-3px) scale(1.08); }
+
+  /* infobulle commune a toutes les cartes */
+  #tip { position: fixed; z-index: 50; pointer-events: none; min-width: 170px; max-width: 240px;
+    padding: 11px 14px 12px; border-radius: 10px; background: rgba(14, 16, 23, .96);
+    border: 1px solid var(--hair-2); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .9);
+    opacity: 0; transform: translateY(4px); transition: opacity .15s, transform .15s; }
+  #tip.on { opacity: 1; transform: none; }
+  #tip .n { font: 600 17px/1.15 var(--serif); }
+  #tip .row { display: flex; justify-content: space-between; gap: 14px; margin-top: 6px;
+    font-size: 12px; color: var(--muted); letter-spacing: .4px; }
+  #tip .row b { color: var(--paper); font-weight: 500; }
+  #tip .el { display: inline-flex; align-items: center; gap: 6px; }
+  #tip .el::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--el); box-shadow: 0 0 8px var(--el); }
+
+  /* ------------------------------------------------------------ accueil : le duel */
+  .duel { position: relative; display: grid; grid-template-columns: auto minmax(260px, 1fr) auto;
+    align-items: center; gap: clamp(16px, 2.4vw, 40px); padding: 26px 0 8px; perspective: 1400px; }
+  .hand { display: grid; grid-template-columns: repeat(2, auto); gap: 12px; position: relative; }
+  .hand.me { transform: rotateY(9deg); transform-origin: right center; }
+  .hand.opp { transform: rotateY(-9deg); transform-origin: left center; }
+  .hand .who { position: absolute; top: 50%; font: 600 10.5px var(--display); letter-spacing: 4px;
+    text-transform: uppercase; color: var(--faint); writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
+  .hand.me .who { left: -26px; }
+  .hand.opp .who { right: -26px; transform: translateY(-50%); }
+  .verdict { text-align: center; position: relative; }
+  .verdict .ghost { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: -1;
+    font: 700 clamp(120px, 15vw, 210px)/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
+    color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--res) 30%, transparent); white-space: nowrap; }
+  .verdict .word { font: 700 clamp(48px, 6.4vw, 86px)/.9 var(--display); font-variation-settings: "wdth" 75;
+    font-stretch: condensed; letter-spacing: 2px; text-transform: uppercase; color: var(--res);
+    text-shadow: 0 0 40px color-mix(in srgb, var(--res) 35%, transparent); margin: 10px 0 12px; }
+  .verdict .vs { font: italic 400 15px var(--serif); color: var(--muted); }
+  .verdict .opp { font: 600 clamp(22px, 2.4vw, 30px)/1.15 var(--serif); margin: 2px 0 16px; overflow-wrap: anywhere; }
+  .facts { display: flex; justify-content: center; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .facts div { padding: 9px 14px; }
+  .facts div + div { border-left: 1px solid var(--hair); }
+  .facts b { display: block; font: 600 22px/1.1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; }
+  .facts span { font-size: 10.5px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted); }
+  /* la donne : les cartes partent du centre */
+  .deal .hand.me .card { animation: dealL .7s var(--ease) both; }
+  .deal .hand.opp .card { animation: dealR .7s var(--ease) both; }
+  .deal .hand .card:nth-child(2) { animation-delay: .07s; } .deal .hand .card:nth-child(3) { animation-delay: .14s; }
+  .deal .hand .card:nth-child(4) { animation-delay: .21s; } .deal .hand .card:nth-child(5) { animation-delay: .28s; }
+  .deal .verdict .word { animation: stamp .6s .35s var(--ease) both; }
+  @keyframes dealL { from { opacity: 0; transform: translateX(160px) rotate(12deg) scale(.85); } }
+  @keyframes dealR { from { opacity: 0; transform: translateX(-160px) rotate(-12deg) scale(.85); } }
+  @keyframes stamp { from { opacity: 0; transform: scale(1.35); letter-spacing: 14px; } }
+
+  /* ------------------------------------------------------------ tableau de scores */
+  .board { display: grid; grid-template-columns: repeat(4, 1fr) 1.5fr; margin-top: 34px;
+    border-top: 1px solid var(--hair-2); border-bottom: 1px solid var(--hair-2); }
+  .board > div { padding: 16px 20px 14px; }
+  .board > div + div { border-left: 1px solid var(--hair); }
+  .board .k { font-size: 10.5px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted); }
+  .board .v { font: 600 46px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
+    margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .board .v small { font-size: 20px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+  .board .s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .seismo { display: flex; align-items: center; gap: 4px; height: 50px; margin-top: 10px; position: relative; }
+  .seismo::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--hair-2); }
+  .seismo i { width: 7px; height: 100%; position: relative; flex: none; }
+  .seismo i::after { content: ""; position: absolute; left: 0; right: 0; border-radius: 2px; }
+  .seismo i.victoire::after { bottom: 50%; height: 44%; background: var(--win); }
+  .seismo i.defaite::after { top: 50%; height: 44%; background: var(--loss); }
+  .seismo i.egalite::after { top: 44%; height: 12%; background: var(--draw); }
+  .grow .seismo i::after { animation: tick .5s var(--ease) both; animation-delay: calc(var(--i) * 25ms + .3s); }
+  @keyframes tick { from { transform: scaleY(0); } }
+  .seismo i.victoire::after { transform-origin: bottom; } .seismo i.defaite::after { transform-origin: top; }
+
+  /* ------------------------------------------------------------ progression (position au classement) */
+  :root { --chart-line: #b38c44; --chart-grid: #1d2029; } /* trait valide sur fond sombre (bande L, chroma, contraste) */
+  h2.title .btn { order: 2; font-size: 11px; padding: 6px 14px; }
+  h2.title::after { order: 1; }
+  .prog { position: relative; outline: none; }
+  .prog:focus-visible { outline: 1px dashed var(--brass-dim); outline-offset: 6px; border-radius: 4px; }
+  .chart-head { display: flex; align-items: baseline; gap: 12px; margin: 6px 0 0; }
+  .chart-head .name { font-size: 10.5px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted); min-width: 64px; }
+  .chart-head .now { font: 600 24px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; color: var(--paper); }
+  .chart-head .delta { font-size: 12.5px; color: var(--muted); }
+  .chart-head .delta b { color: var(--paper); font-weight: 500; }
+  .prog svg { display: block; width: 100%; overflow: visible; }
+  .prog svg text { fill: var(--muted); font: 11px var(--display); }
+  .prog svg text.end { fill: var(--paper); font-weight: 600; font-size: 12px; }
+  .prog .line { fill: none; stroke: var(--chart-line); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .prog .wash { stroke: none; }
+  .prog .dot { fill: var(--chart-line); stroke: var(--ink); stroke-width: 2; }
+  .prog .dot.on { r: 5.5; }
+  .prog .grid { stroke: var(--chart-grid); stroke-width: 1; }
+  .prog .cross { stroke: var(--hair-2); stroke-width: 1; opacity: 0; }
+  .prog.hover .cross { opacity: 1; }
+  .draw .line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawl 1.1s .2s var(--ease) forwards; }
+  @keyframes drawl { to { stroke-dashoffset: 0; } }
+  #ctip { position: fixed; z-index: 50; pointer-events: none; min-width: 180px; padding: 10px 14px 11px; border-radius: 10px;
+    background: rgba(14, 16, 23, .96); border: 1px solid var(--hair-2); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .9);
+    opacity: 0; transition: opacity .12s; }
+  #ctip.on { opacity: 1; }
+  #ctip .when { font-size: 11.5px; color: var(--muted); letter-spacing: .3px; }
+  #ctip .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+  #ctip .row i { width: 12px; height: 2px; background: var(--chart-line); border-radius: 1px; }
+  #ctip .row b { color: var(--paper); font: 600 17px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; min-width: 34px; }
+  #ctip .res { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--hair); font-size: 12.5px; color: var(--muted); }
+  #ctip .res span { color: var(--paper); }
+
+  /* ------------------------------------------------------------ rangs */
+  .rk { white-space: nowrap; }
+  /* ------------------------------------------------------------ reglages : jeu et preparation des cartes */
+  .setting.col { flex-direction: column; align-items: stretch; gap: 12px; }
+  .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .field { flex: 1; min-width: 220px; background: var(--ink-2); color: var(--paper); border: 1px solid var(--hair-2);
+    border-radius: 8px; padding: 9px 12px; font: 13px Consolas, monospace; }
+  .field:focus { outline: none; border-color: var(--brass-dim); }
+  .btn:disabled { opacity: .45; cursor: default; background: none; color: var(--brass); }
+  .pbar { height: 6px; border-radius: 3px; background: var(--hair); overflow: hidden; margin-top: 12px; }
+  .pbar[hidden] { display: none; }
+  .pbar b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--brass-dim), var(--brass)); transition: width .4s var(--ease); }
+  .prep-msg { margin-top: 6px; min-height: 1em; }
+  .d.err, .prep-msg.err { color: var(--loss); }
+  .prep-msg.ok { color: var(--win); }
+  .banner-link { color: var(--brass); text-decoration: underline; text-underline-offset: 3px; }
+  .facts b .rk { font: inherit; letter-spacing: normal; text-transform: none; color: inherit; } /* pas le style des legendes */
+  .mode-tag { display: block; font: 500 11px var(--display); letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint); margin-top: 1px; }
+  .prog-note { color: var(--muted); font: italic 13.5px var(--serif); margin: -6px 0 10px; }
+
+  /* ------------------------------------------------------------ historique */
+  .log { display: flex; flex-direction: column; }
+  .match { display: grid; grid-template-columns: 74px 110px minmax(120px, 1fr) auto auto 92px; align-items: center;
+    gap: 18px; padding: 12px 14px 12px 16px; border-bottom: 1px solid var(--hair); position: relative;
+    transition: background .2s; }
+  .match::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px; border-radius: 2px; background: var(--rc); }
+  .match:hover { background: linear-gradient(90deg, rgba(255, 255, 255, .025), transparent); }
+  .match .date { color: var(--muted); font-size: 12.5px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .match .res { font: 600 19px var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
+    letter-spacing: 1.2px; text-transform: uppercase; color: var(--rc); }
+  .match .who { font: 500 17px/1.2 var(--serif); overflow-wrap: anywhere; }
+  .match .who small { display: block; font: 12px var(--display); color: var(--muted); letter-spacing: .3px; }
+  .mini { display: flex; gap: 4px; }
+  .versus { display: flex; align-items: center; gap: 10px; }
+  .versus em { font: italic 13px var(--serif); color: var(--faint); }
+  .match .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+  .match .num b { color: var(--paper); font-weight: 500; font-size: 14px; }
+  .victoire { --rc: var(--win); } .defaite { --rc: var(--loss); } .egalite { --rc: var(--draw); }
+
+  /* ------------------------------------------------------------ decks */
+  .decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 14px; }
+  .deck { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 22px;
+    padding: 18px 22px 18px 26px; border-radius: 14px; background: linear-gradient(140deg, var(--felt), var(--ink-2));
+    border: 1px solid var(--hair); transition: border-color .3s, transform .3s var(--ease); }
+  .deck:hover { border-color: var(--hair-2); transform: translateY(-2px); }
+  .fan { display: flex; padding: 8px 0 4px; }
+  .fan .card + .card { margin-left: -30px; }
+  .fan .card:nth-child(1) { transform: rotate(-8deg) translateY(6px); }
+  .fan .card:nth-child(2) { transform: rotate(-3deg); }
+  .fan .card:nth-child(3) { transform: rotate(3deg); }
+  .fan .card:nth-child(4) { transform: rotate(8deg) translateY(6px); }
+  .fan .card:hover { transform: translateY(-12px) rotate(0); }
+  .deck .rate { font: 600 44px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; }
+  .deck .rate small { font-size: 18px; color: var(--muted); }
+  .deck .meta { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .deck .meta b { color: var(--paper); font-weight: 500; }
+  .meter { height: 3px; background: var(--hair); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+  .meter b { display: block; height: 100%; background: linear-gradient(90deg, var(--brass), var(--win)); border-radius: 2px;
+    transform-origin: left; animation: fillx .9s var(--ease) both; }
+  .meter.bad b { background: linear-gradient(90deg, var(--brass), var(--loss)); }
+  @keyframes fillx { from { transform: scaleX(0); } }
+
+  /* ------------------------------------------------------------ grilles de cartes avec statistiques */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 26px 18px; }
+  .stat-card { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .stat-card .card { margin-bottom: 12px; }
+  .stat-card .big { font: 600 28px/1 var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed; }
+  .stat-card .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .stat-card .nm { font: 500 14px/1.2 var(--serif); margin-top: 6px; max-width: 132px; overflow-wrap: anywhere; }
+  .stat-card.threat .card { box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .5), 0 0 34px -10px rgba(255, 107, 87, .55); }
+  .stat-card.threat .big { color: var(--loss); }
+
+  /* ------------------------------------------------------------ tableaux aeres */
+  table.airy { width: 100%; border-collapse: collapse; }
+  table.airy th { text-align: left; font: 600 10.5px var(--display); letter-spacing: 2.2px; text-transform: uppercase;
+    color: var(--muted); padding: 0 16px 12px; border-bottom: 1px solid var(--hair-2); }
+  table.airy td { padding: 16px; border-bottom: 1px solid var(--hair); }
+  table.airy tr { transition: background .2s; }
+  table.airy tbody tr:hover { background: rgba(255, 255, 255, .025); }
+  table.airy .num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.airy .nm { font: 500 17px var(--serif); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; letter-spacing: 1px;
+    text-transform: uppercase; border: 1px solid var(--hair-2); color: var(--muted); margin-left: 8px; vertical-align: 2px; }
+
+  /* ------------------------------------------------------------ reglages */
+  .settings { max-width: 760px; }
+  .setting { display: flex; align-items: center; gap: 22px; padding: 22px 0; border-bottom: 1px solid var(--hair); }
+  .setting .txt { flex: 1; }
+  .setting .txt .t { font: 500 18px var(--serif); }
+  .setting .txt .d { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+  .btn { background: none; color: var(--brass); border: 1px solid var(--brass-dim); padding: 9px 18px; border-radius: 999px;
+    font: 600 12px var(--display); letter-spacing: 1.6px; text-transform: uppercase; cursor: pointer; transition: background .2s, color .2s; }
+  .btn:hover { background: var(--brass); color: var(--ink); }
+  .switch { position: relative; width: 48px; height: 26px; flex: none; }
+  .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; border-radius: 13px; border: 1px solid var(--hair-2); background: var(--ink-2); transition: .25s; }
+  .switch span::after { content: ""; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted); transition: .3s var(--ease); }
+  .switch input:checked + span { border-color: var(--brass-dim); background: rgba(216, 180, 106, .14); }
+  .switch input:checked + span::after { left: 26px; background: var(--brass); box-shadow: 0 0 10px var(--brass); }
+  .switch input:disabled + span { opacity: .35; }
+  .switch input:focus-visible + span { outline: 1px dashed var(--brass); outline-offset: 3px; }
+  .pill { font: 600 10.5px var(--display); letter-spacing: 1.6px; text-transform: uppercase; padding: 3px 9px;
+    border-radius: 999px; margin-left: 10px; vertical-align: 3px; }
+  .pill.ok { color: var(--win); background: rgba(111, 220, 156, .1); }
+  .pill.bad { color: var(--brass); background: rgba(216, 180, 106, .12); }
+
+  /* ------------------------------------------------------------ petits ecrans */
+  @media (max-width: 1060px) {
+    .duel { grid-template-columns: 1fr; justify-items: center; }
+    .duel .verdict { order: -1; }
+    .hand.me, .hand.opp { transform: none; }
+    .hand { grid-template-columns: repeat(4, auto); }
+    .board { grid-template-columns: repeat(2, 1fr); }
+    .board > div:last-child { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--hair); }
+    .match { grid-template-columns: 70px 1fr auto; }
+    .match .versus, .match .num:last-child { grid-column: 1 / -1; }
+    .decks { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<aside class="rail">
+  <div class="mono" aria-hidden="true"><span>S</span></div>
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="home" aria-selected="true">Accueil</button>
+    <button role="tab" data-tab="decks" aria-selected="false">Decks</button>
+    <button role="tab" data-tab="opponents" aria-selected="false">Adversaires</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Réglages</button>
+  </nav>
+  <div class="live" id="live"><i></i><span id="clock">...</span></div>
+</aside>
+
+<main>
+  <div id="banners"></div>
+
+  <section id="tab-home" class="enter">
+    <div class="kicker" id="home-kicker">Dernier duel</div>
+    <div id="duel"></div>
+    <div id="board"></div>
+    <h2 class="title">Progression <small>position au classement, au début de chaque match</small>
+      <button class="btn" id="prog-toggle" aria-pressed="false">Tableau</button></h2>
+    <div id="progress"></div>
+    <h2 class="title">Historique <small id="log-count"></small></h2>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section id="tab-decks" hidden>
+    <div class="kicker">Mes compositions</div>
+    <h2 class="title" style="margin-top:10px">Decks joués <small>du plus joué au moins joué</small></h2>
+    <div class="decks" id="decks"></div>
+    <h2 class="title">Cartes qui me réussissent <small>classées par victoires</small></h2>
+    <div class="gallery" id="mycards"></div>
+  </section>
+
+  <section id="tab-opponents" hidden>
+    <div class="kicker">Ceux d'en face</div>
+    <h2 class="title" style="margin-top:10px">Cartes qui me battent <small>présentes dans mes défaites</small></h2>
+    <div class="gallery" id="beaters"></div>
+    <h2 class="title">Adversaires rencontrés</h2>
+    <div id="opponents"></div>
+  </section>
+
+  <section id="tab-settings" hidden>
+    <div class="kicker">Application</div>
+    <h2 class="title" style="margin-top:10px">Réglages</h2>
+    <div class="settings" id="settings"></div>
+  </section>
+</main>
+
+<div id="tip" role="tooltip"></div>
+<div id="ctip" role="tooltip"></div>
+
+<script>
+"use strict";
+const LABELS = { victoire: "Victoire", defaite: "Défaite", egalite: "Égalité" };
+const ELEMENTS = { fire: "Feu", water: "Eau", earth: "Terre", nature: "Nature", light: "Lumière", shadow: "Ombre", divine: "Divin" };
+const RARITIES = { common: "Commune", rare: "Rare", epic: "Épique", legendary: "Légendaire", divine: "Divine" };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CARDS = new Map();       // uuid -> infos, pour l'infobulle
+let lastSig = null, lastMatchKey = null, firstRender = true;
+
+// Construction du DOM sans innerHTML : pseudos et noms restent du texte
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+const fill = (id, ...nodes) => document.getElementById(id).replaceChildren(...nodes);
+const parseDate = s => (s ? new Date(s.replace(/\.(\d{3})\d*Z$/, ".$1Z")) : null);
+const fmtDay = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short" });
+const fmtHour = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const day = s => { const d = parseDate(s); return d && !isNaN(d) ? fmtDay.format(d) : "?"; };
+const hour = s => { const d = parseDate(s); return d && !isNaN(d) ? fmtHour.format(d) : ""; };
+const dur = sec => (sec < 60 ? `${sec} s` : `${Math.round(sec / 60)} min`);
+const pct = x => Number(x).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
+
+// ------------------------------------------------------------ rangs du mode Classe
+// Le rang est calcule cote tracker (donnee interne du jeu, jamais affichee : trop obscure
+// pour un joueur). En Legende, on montre la position au classement, comme le jeu.
+const isLegend = st => !!st && st.tier === "legend";
+function rankPill(st) {
+  if (!st || !st.tier) return h("span", { class: "rk" }, "?");
+  return h("span", { class: `rk rk-${st.tier || "unranked"}` }, st.tier_name || "?");
+}
+function rankDetail(st) {   // "n° 262" en Legende uniquement
+  return isLegend(st) && st.placement != null ? `n° ${st.placement}` : "";
+}
+
+// ------------------------------------------------------------ cartes
+function card(c, size) {
+  CARDS.set(c.uuid, c);
+  const el = c.element && ELEMENTS[c.element] ? `--el: var(--${c.element})` : null;
+  const face = h("div", { class: "face" });
+  const placeholder = () => h("div", { class: "ph" },
+    h("span", { class: "glyph" }, (c.name || "?").charAt(0)),
+    c.name ? h("span", { class: "nm" }, c.name) : h("span", { class: "uid" }, c.uuid.slice(0, 8)));
+  if (c.image && UUID.test(c.uuid)) {
+    const img = h("img", { src: `/cards/${c.uuid}.webp`, alt: c.name || "Carte inconnue", loading: "lazy", decoding: "async", draggable: "false" });
+    img.addEventListener("error", () => face.replaceChildren(placeholder()));
+    face.append(img);
+  } else {
+    face.append(placeholder());
+  }
+  return h("div", { class: `card ${size} r-${c.rarity || "none"}`, style: el, tabindex: size === "xs" ? null : "0",
+    "data-uuid": c.uuid, "aria-label": c.name || "Carte inconnue" }, face, h("span", { class: "gem", "aria-hidden": "true" }));
+}
+const byName = cards => [...cards].sort((a, b) => (a.name || "~").localeCompare(b.name || "~", "fr"));
+
+// infobulle : nom, PV, element, rarete
+const tip = document.getElementById("tip");
+function showTip(target) {
+  const c = CARDS.get(target.dataset.uuid);
+  if (!c) return;
+  tip.style.setProperty("--el", c.element && ELEMENTS[c.element] ? `var(--${c.element})` : "var(--muted)");
+  tip.replaceChildren(...[
+    h("div", { class: "n" }, c.name || "Carte inconnue"),
+    c.name ? null : h("div", { class: "row" }, h("span", {}, "Catalogue à régénérer")),
+    h("div", { class: "row" }, h("span", { class: "el" }, ELEMENTS[c.element] || "Élément ?"), h("b", {}, c.hp ? `${c.hp} PV` : "PV ?")),
+    h("div", { class: "row" }, h("span", {}, "Rareté"), h("b", {}, RARITIES[c.rarity] || "?")),
+  ].filter(Boolean));
+  const r = target.getBoundingClientRect();
+  tip.classList.add("on");
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = r.left + r.width / 2 - tw / 2, y = r.top - th - 10;
+  if (y < 8) y = r.bottom + 10;
+  x = Math.max(8, Math.min(x, innerWidth - tw - 8));
+  tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+}
+const hideTip = () => tip.classList.remove("on");
+document.addEventListener("mouseover", e => { const t = e.target.closest("[data-uuid]"); t ? showTip(t) : hideTip(); });
+document.addEventListener("focusin", e => { const t = e.target.closest("[data-uuid]"); t ? showTip(t) : hideTip(); });
+document.addEventListener("scroll", hideTip, true);
+
+// ------------------------------------------------------------ bandeaux d'alerte
+function renderBanners(d) {
+  const out = [], c = d.catalog, g = d.game || {};
+  const b = (t, ...rest) => h("div", { class: "banner" }, h("b", {}, t), h("span", {}, ...rest));
+  const toPrepare = label => h("a", { href: "#settings", class: "banner-link" }, label);
+  if (d.app.mode === "browser") out.push(b("Navigateur", "WebView2 est absent : le tableau de bord s'affiche dans le navigateur, le tracker tourne dans la zone de notification."));
+  if (!d.index_found) out.push(b("En attente", "Aucun match SPAM trouvé pour l'instant. Joue une partie : elle sera détectée automatiquement à la fin du match."));
+  if (d.prepare && d.prepare.state === "running") out.push(b("Cartes", "Préparation des cartes en cours... ", toPrepare("Voir la progression")));
+  else if (c.state === "absent") out.push(b("Cartes", "Les cartes ne sont pas encore préparées : elles s'affichent sans nom ni illustration. ", toPrepare("Préparer les cartes")));
+  else if (c.state === "illisible") out.push(b("Cartes", "Le catalogue des cartes est illisible. ", toPrepare("Préparer les cartes à nouveau")));
+  else if (c.state === "perime") out.push(b("Cartes", `À mettre à jour : ${c.reason}. `, toPrepare("Préparer les cartes")));
+  else if (d.images_missing) out.push(b("Illustrations", `${d.images_missing} carte(s) sans illustration. `, toPrepare("Préparer les cartes")));
+  if (g.warning) out.push(b("Version", g.warning));
+  fill("banners", ...out);
+}
+
+// ------------------------------------------------------------ accueil
+function renderHome(d, animate) {
+  const s = d.summary, m = d.recent[0];
+  document.body.style.setProperty("--res", m ? `var(--${m.result === "victoire" ? "win" : m.result === "defaite" ? "loss" : "draw"})` : "var(--brass)");
+  if (!m) {
+    fill("home-kicker", "Premier duel");
+    fill("duel", h("div", { class: "empty" }, "Aucun match enregistré. Lance une partie de SPAM : elle apparaîtra ici dès la fin du match."));
+  } else {
+    fill("home-kicker", `Dernier duel · ${m.mode_name} · ${day(m.start_utc)} à ${hour(m.start_utc)}`);
+    const word = LABELS[m.result];
+    fill("duel", h("div", { class: "duel" + (animate ? " deal" : ""), style: `--res: var(--${m.result === "victoire" ? "win" : m.result === "defaite" ? "loss" : "draw"})` },
+      h("div", { class: "hand me" }, h("span", { class: "who" }, "Moi"), byName(m.my_deck).map(c => card(c, "xl"))),
+      h("div", { class: "verdict" },
+        h("div", { class: "ghost", "aria-hidden": "true" }, "VS"),
+        h("div", { class: "word" }, word),
+        h("div", { class: "vs" }, "contre"),
+        h("div", { class: "opp" }, m.opponent || "?", m.is_ai ? h("span", { class: "tag" }, "IA") : null),
+        h("div", { class: "facts" },
+          h("div", {}, h("b", {}, m.turns ?? "?"), h("span", {}, "tours")),
+          h("div", {}, h("b", {}, dur(m.duration_s)), h("span", {}, "durée")),
+          m.is_ai ? null : h("div", {}, h("b", {}, rankPill(m.opp)), h("span", {}, "rang adv.")),
+          m.is_ai || !rankDetail(m.opp) ? null : h("div", {}, h("b", {}, rankDetail(m.opp)), h("span", {}, "classement adv.")))),
+      h("div", { class: "hand opp" }, h("span", { class: "who" }, "Adversaire"), byName(m.opp_deck).map(c => card(c, "xl")))));
+  }
+
+  const streak = s.streak.result
+    ? h("span", { class: s.streak.result, style: "color: var(--rc)" }, s.streak.n, h("small", {}, s.streak.result === "victoire" ? "V" : s.streak.result === "defaite" ? "D" : "N"))
+    : "-";
+  const form = d.recent.slice(0, 30).reverse();
+  fill("board", h("div", { class: "board" + (animate ? " grow" : "") },
+    h("div", {}, h("div", { class: "k" }, "Parties"), h("div", { class: "v" }, s.total),
+      h("div", { class: "s" }, `${s.wins} V · ${s.losses} D${s.draws ? ` · ${s.draws} N` : ""}`),
+      h("div", { class: "s" }, s.by_mode.map(x => `${x.mode} ${x.games}`).join(" · ") || ""),
+      s.bots.games ? h("div", { class: "s" }, `+ ${plural(s.bots.games, "partie")} contre l'IA, à part`) : null),
+    h("div", {}, h("div", { class: "k" }, "Victoires"), h("div", { class: "v" }, pct(s.winrate), h("small", {}, "%")),
+      h("div", { class: "s" }, s.bots.games ? "contre des humains" : "sur toutes les parties")),
+    h("div", {}, h("div", { class: "k" }, "Série en cours"), h("div", { class: "v" }, streak),
+      h("div", { class: "s" }, s.streak.result ? plural(s.streak.n, LABELS[s.streak.result].toLowerCase()) : "")),
+    h("div", {}, h("div", { class: "k" }, "Mon rang · Classé"),
+      h("div", { class: "v", style: "font-size:34px" }, s.me ? rankPill(s.me) : "-"),
+      h("div", { class: "s" }, rankDetail(s.me) ? `${rankDetail(s.me)} au classement` : "")),
+    h("div", {}, h("div", { class: "k" }, `Forme · ${plural(form.length, "match")}`),
+      h("div", { class: "seismo", "aria-label": "Forme récente" }, form.map((x, i) =>
+        h("i", { class: x.result, style: `--i:${i}`, title: `${LABELS[x.result]} contre ${x.opponent} · ${day(x.start_utc)}` }))))));
+
+  fill("log-count", d.recent.length ? `${plural(d.recent.length, "match")} affiché${d.recent.length > 1 ? "s" : ""}` : "");
+  fill("log", d.recent.length ? h("div", {}, d.recent.map(x => h("div", { class: "match " + x.result },
+    h("div", { class: "date" }, day(x.start_utc), h("br"), hour(x.start_utc)),
+    h("div", { class: "res" }, LABELS[x.result], h("span", { class: "mode-tag" }, x.mode_name)),
+    h("div", { class: "who" }, x.opponent || "?", x.is_ai ? h("span", { class: "tag" }, "IA") : null,
+      x.is_ai ? h("small", {}, "adversaire IA, hors statistiques")
+        : h("small", {}, rankPill(x.opp), rankDetail(x.opp) ? ` · ${rankDetail(x.opp)}` : "")),
+    h("div", { class: "versus" }, h("div", { class: "mini" }, byName(x.my_deck).map(c => card(c, "xs"))), h("em", {}, "vs"),
+      h("div", { class: "mini" }, byName(x.opp_deck).map(c => card(c, "xs")))),
+    h("div", {}),
+    h("div", { class: "num" }, h("b", {}, plural(x.turns ?? 0, "tour")), h("br"), dur(x.duration_s))))) : h("div", { class: "empty" }, "Rien pour l'instant."));
+}
+
+// ------------------------------------------------------------ progression : position au classement
+// Axe inverse : plus haut = meilleure position. (La structure accepte plusieurs series empilees
+// partageant l'axe des matchs, jamais de double axe.)
+const SVGNS = "http://www.w3.org/2000/svg";
+function s(tag, attrs, ...children) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v !== null && v !== undefined) el.setAttribute(k, v);
+  for (const c of children.flat()) if (c !== null && c !== undefined) el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return el;
+}
+// graduations "propres" (1, 2, 5 x 10^k)
+function niceTicks(min, max, count) {
+  if (min === max) { min -= 1; max += 1; }
+  const raw = (max - min) / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map(f => f * mag).find(st => st >= raw);
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(Math.round(v * 100) / 100);
+  return { lo, hi, ticks };
+}
+let progData = [], progTable = false, progAnimate = false;
+
+function renderProgress(points, animate) {
+  progData = points; progAnimate = animate;
+  const box = document.getElementById("progress");
+  const btn = document.getElementById("prog-toggle");
+  btn.setAttribute("aria-pressed", progTable);
+  btn.textContent = progTable ? "Graphique" : "Tableau";
+  const usable = points.filter(p => p.placement != null);
+  if (!usable.length) { box.replaceChildren(h("div", { class: "empty" }, "Ta position au classement apparaîtra après ton premier match.")); return; }
+  if (progTable) { box.replaceChildren(progressTable(points)); return; }
+
+  const W = Math.max(320, box.clientWidth || 900);
+  const ML = 46, MR = 54, n = points.length;
+  const x = i => (n === 1 ? ML + (W - ML - MR) / 2 : ML + i * (W - ML - MR) / (n - 1));
+  const showDots = n <= 60;
+  const series = [
+    { key: "placement", name: "Classement", unit: "place", prefix: "n° ", invert: true, H: 200, axis: true },
+  ];
+  // le rang ne bouge qu'en mode Classe : on le dit si aucun match classe n'est affiche
+  const ranked = points.filter(p => p.mode_name === "Classé").length;
+  const note = ranked ? null : h("div", { class: "prog-note" },
+    `Tes ${plural(points.length, "match")} sont en mode Normal : ton rang n'y change pas. Ta position au classement bouge quand même, car les autres joueurs progressent.`);
+  const wrap = h("div", { class: "prog" + (animate ? " draw" : ""), tabindex: "0",
+    "aria-label": "Évolution de ta position au classement. Flèches gauche et droite pour parcourir les matchs." });
+  const crosses = [], dotsBy = [];
+
+  for (const se of series) {
+    const vals = points.map(p => p[se.key]);
+    const known = vals.filter(v => v != null);
+    const top = 14, bottom = se.axis ? 28 : 10, ph = se.H - top - bottom;
+    const head = h("div", { class: "chart-head" }, h("span", { class: "name" }, se.name));
+    if (!known.length) {
+      wrap.append(head, h("div", { class: "empty", style: "padding:10px 0" }, "Pas de donnée."));
+      crosses.push(null); dotsBy.push([]); continue;
+    }
+    const first = known[0], last = known[known.length - 1], diff = last - first;
+    // pour le classement, descendre en nombre = progresser
+    const better = se.invert ? diff < 0 : diff > 0;
+    const deltaTxt = diff === 0 ? "stable depuis le premier match"
+      : `${better ? "en hausse" : "en baisse"} de `;
+    // a cote de la position : mon rang actuel (dernier point connu)
+    const lastTier = [...points].reverse().find(p => p.tier);
+    head.append(...[h("span", { class: "now" }, `${se.prefix}${last}`),
+      lastTier ? rankPill({ tier: lastTier.tier, tier_name: lastTier.tier_name }) : null,
+      h("span", { class: "delta" }, deltaTxt, diff === 0 ? null : h("b", {}, `${Math.abs(diff)} ${se.unit}${Math.abs(diff) > 1 ? "s" : ""}`),
+        diff === 0 ? null : " depuis le premier match")].filter(Boolean));
+    const { lo, hi, ticks } = niceTicks(Math.min(...known), Math.max(...known), 3);
+    const y = v => se.invert ? top + (v - lo) / (hi - lo) * ph : top + (hi - v) / (hi - lo) * ph;
+
+    const svg = s("svg", { viewBox: `0 0 ${W} ${se.H}`, height: se.H, role: "img", "aria-label": `${se.name} : ${first} au premier match, ${last} au dernier` });
+    svg.append(s("defs", {}, s("linearGradient", { id: `wash-${se.key}`, x1: 0, y1: 0, x2: 0, y2: 1 },
+      s("stop", { offset: "0", "stop-color": "#b38c44", "stop-opacity": ".10" }),
+      s("stop", { offset: "1", "stop-color": "#b38c44", "stop-opacity": "0" }))));
+    for (const t of ticks) {
+      svg.append(s("line", { class: "grid", x1: ML, x2: W - MR, y1: y(t), y2: y(t) }),
+        s("text", { x: ML - 10, y: y(t) + 4, "text-anchor": "end" }, t));
+    }
+    // trace par segments (un trou si une valeur manque)
+    let d = "", area = "", segStart = null;
+    vals.forEach((v, i) => {
+      if (v == null) { segStart = null; return; }
+      d += `${segStart === null ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+      if (segStart === null) segStart = i;
+    });
+    const firstI = vals.findIndex(v => v != null), lastI = vals.length - 1 - [...vals].reverse().findIndex(v => v != null);
+    area = `${d}L${x(lastI).toFixed(1)},${top + ph}L${x(firstI).toFixed(1)},${top + ph}Z`;
+    if (!vals.some(v => v == null)) svg.append(s("path", { class: "wash", d: area, fill: `url(#wash-${se.key})` }));
+    svg.append(s("path", { class: "line", d, pathLength: 1 }));
+    const cross = s("line", { class: "cross", x1: 0, x2: 0, y1: top - 6, y2: top + ph + 4 });
+    svg.append(cross);
+    const dots = vals.map((v, i) => (v == null || (!showDots && i !== lastI)) ? null
+      : s("circle", { class: "dot", cx: x(i), cy: y(v), r: 4 }));
+    dots.forEach(c => c && svg.append(c));
+    // valeur en bout de courbe (texte en encre normale, jamais couleur de serie)
+    svg.append(s("text", { class: "end", x: x(lastI) + 10, y: y(last) + 4 }, last));
+    if (se.axis) {
+      // etiquettes espacees d'au moins GAP px ; le dernier match est toujours etiquete
+      const GAP = 96, idx = [];
+      for (let i = 0; i < n; i++) {
+        if (!idx.length || x(i) - x(idx[idx.length - 1]) >= GAP) idx.push(i);
+      }
+      if (n > 1 && idx[idx.length - 1] !== n - 1) {
+        if (x(n - 1) - x(idx[idx.length - 1]) < GAP) idx.pop();
+        idx.push(n - 1);
+      }
+      // date complete au premier libelle et quand le jour change, sinon l'heure seule
+      let prevDay = null;
+      for (const i of idx) {
+        const dd = day(points[i].t), label = dd === prevDay ? hour(points[i].t) : `${dd} ${hour(points[i].t)}`;
+        prevDay = dd;
+        svg.append(s("text", { x: x(i), y: se.H - 8, "text-anchor": n === 1 ? "middle" : i === 0 ? "start" : i === n - 1 ? "end" : "middle" }, label));
+      }
+    }
+    wrap.append(head, svg);
+    crosses.push(cross); dotsBy.push(dots);
+  }
+
+  // reticule partage + infobulle (souris et clavier)
+  const ctip = document.getElementById("ctip");
+  let cur = -1;
+  const show = (i, anchorX, anchorY) => {
+    if (!points[i]) return;
+    cur = i; wrap.classList.add("hover");
+    crosses.forEach(c => c && (c.setAttribute("x1", x(i)), c.setAttribute("x2", x(i))));
+    dotsBy.forEach(ds => ds.forEach((c, j) => c && c.classList.toggle("on", j === i)));
+    const p = points[i];
+    ctip.replaceChildren(
+      h("div", { class: "when" }, `Match ${i + 1} sur ${n} · ${day(p.t)} à ${hour(p.t)}`),
+      h("div", { class: "row" }, h("i"), h("b", {}, p.placement != null ? `n° ${p.placement}` : "-"), "au classement"),
+      h("div", { class: "row" }, h("i"), h("b", {}, p.tier_name || "-"), "rang"),
+      h("div", { class: "when" }, `Mode ${p.mode_name || "?"}${p.is_ai ? " · contre l'IA" : ""}`),
+      h("div", { class: "res" }, h("span", {}, LABELS[p.result] || "?"), ` contre ${p.opponent || "?"}`));
+    ctip.classList.add("on");
+    const tw = ctip.offsetWidth, th = ctip.offsetHeight;
+    let left = anchorX + 16, topY = anchorY - th / 2;
+    if (left + tw > innerWidth - 8) left = anchorX - tw - 16;
+    ctip.style.left = `${Math.max(8, left)}px`;
+    ctip.style.top = `${Math.max(8, Math.min(topY, innerHeight - th - 8))}px`;
+  };
+  const hide = () => { cur = -1; wrap.classList.remove("hover"); ctip.classList.remove("on"); dotsBy.forEach(ds => ds.forEach(c => c && c.classList.remove("on"))); };
+  const indexAt = clientX => {
+    const r = wrap.querySelector("svg").getBoundingClientRect();
+    if (!r.width || n === 1) return n - 1;   // graphique pas encore mis en page
+    const px = (clientX - r.left) * (W / r.width);
+    const i = Math.round((px - ML) / ((W - ML - MR) / (n - 1)));
+    return Number.isFinite(i) ? Math.max(0, Math.min(n - 1, i)) : n - 1;
+  };
+  wrap.addEventListener("pointermove", e => show(indexAt(e.clientX), e.clientX, e.clientY));
+  wrap.addEventListener("pointerleave", hide);
+  wrap.addEventListener("blur", hide);
+  wrap.addEventListener("keydown", e => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(e.key)) return;
+    e.preventDefault();
+    if (e.key === "Escape") return hide();
+    let i = cur < 0 ? n - 1 : cur;
+    i = e.key === "ArrowLeft" ? i - 1 : e.key === "ArrowRight" ? i + 1 : e.key === "Home" ? 0 : n - 1;
+    i = Math.max(0, Math.min(n - 1, i));
+    const r = wrap.querySelector("svg").getBoundingClientRect();
+    show(i, r.left + x(i) * r.width / W, r.top + r.height / 2);
+  });
+  box.replaceChildren(...[note, wrap].filter(Boolean));
+}
+
+// meme donnees, sans survol necessaire
+function progressTable(points) {
+  return h("table", { class: "airy" },
+    h("thead", {}, h("tr", {}, h("th", { class: "num" }, "Match"), h("th", {}, "Date"), h("th", {}, "Mode"),
+      h("th", { class: "num" }, "Classement"), h("th", {}, "Rang"),
+      h("th", {}, "Résultat"), h("th", {}, "Adversaire"))),
+    h("tbody", {}, points.map((p, i) => ({ p, i })).reverse().map(({ p, i }) => h("tr", {},
+      h("td", { class: "num muted" }, i + 1),
+      h("td", { class: "muted" }, `${day(p.t)} ${hour(p.t)}`),
+      h("td", { class: "muted" }, p.mode_name || "?"),
+      h("td", { class: "num" }, p.placement != null ? `n° ${p.placement}` : "-"),
+      h("td", {}, p.tier ? rankPill({ tier: p.tier, tier_name: p.tier_name }) : "-"),
+      h("td", { class: p.result, style: "color:var(--rc)" }, LABELS[p.result] || "?"),
+      h("td", { class: "nm" }, p.opponent || "?")))));
+}
+document.getElementById("prog-toggle").addEventListener("click", () => { progTable = !progTable; renderProgress(progData, false); });
+// redessine quand la largeur reelle du conteneur change (fenetre, barre de defilement, retour d'onglet)
+let resizeTimer, lastProgWidth = 0;
+new ResizeObserver(entries => {
+  const w = Math.round(entries[0].contentRect.width);
+  if (!w || w === lastProgWidth) return;
+  lastProgWidth = w;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => renderProgress(progData, false), 120);
+}).observe(document.getElementById("progress"));
+
+// ------------------------------------------------------------ decks
+function renderDecks(d) {
+  fill("decks", d.decks.length ? h("div", { style: "display:contents" }, d.decks.map(x => h("div", { class: "deck" },
+    h("div", { class: "fan" }, byName(x.cards).map(c => card(c, "sm"))),
+    h("div", {},
+      h("div", { class: "rate" }, pct(x.winrate), h("small", {}, " %")),
+      h("div", { class: "meta" }, h("b", {}, plural(x.games, "partie")), ` · ${x.victoire} V · ${x.defaite} D${x.egalite ? ` · ${x.egalite} N` : ""}`),
+      h("div", { class: "meter" + (x.winrate < 50 ? " bad" : "") }, h("b", { style: `width:${x.winrate}%` })))))) : h("div", { class: "empty" }, "Aucun deck joué pour l'instant."));
+
+  fill("mycards", d.my_cards.length ? h("div", { style: "display:contents" }, d.my_cards.map(x => h("div", { class: "stat-card" },
+    card(x.card, "md"),
+    h("div", { class: "big" }, `${pct(x.winrate)} %`),
+    h("div", { class: "sub" }, `${x.victoire} V sur ${plural(x.games, "partie")}`),
+    h("div", { class: "nm" }, x.card.name || x.card.uuid.slice(0, 8))))) : h("div", { class: "empty" }, "Aucune carte jouée pour l'instant."));
+}
+
+// ------------------------------------------------------------ adversaires
+function renderOpponents(d) {
+  fill("beaters", d.beaters.length ? h("div", { style: "display:contents" }, d.beaters.map(x => h("div", { class: "stat-card threat" },
+    card(x.card, "md"),
+    h("div", { class: "big" }, plural(x.losses, "défaite")),
+    h("div", { class: "sub" }, `sur ${plural(x.faced, "rencontre")} · ${pct(x.loss_rate)} %`),
+    h("div", { class: "nm" }, x.card.name || x.card.uuid.slice(0, 8))))) : h("div", { class: "empty" }, "Aucune défaite pour l'instant. Profite."));
+
+  const oppTable = (list, withRank) => h("table", { class: "airy" },
+    h("thead", {}, h("tr", {}, h("th", {}, "Adversaire"), h("th", { class: "num" }, "Parties"), h("th", { class: "num" }, "Bilan"),
+      h("th", { class: "num" }, "Taux"),
+      withRank ? h("th", {}, "Rang") : null, withRank ? h("th", { class: "num" }, "Classement") : null,
+      h("th", { class: "num" }, "Vu le"))),
+    h("tbody", {}, list.map(o => h("tr", {},
+      h("td", { class: "nm" }, o.name || "?", o.is_ai ? h("span", { class: "tag" }, "IA") : null),
+      h("td", { class: "num" }, o.games),
+      h("td", { class: "num" }, h("span", { style: "color:var(--win)" }, `${o.victoire} V`), " · ", h("span", { style: "color:var(--loss)" }, `${o.defaite} D`)),
+      h("td", { class: "num" }, `${pct(o.winrate)} %`),
+      // dernier etat connu : son rang et sa position au classement
+      withRank ? h("td", {}, rankPill(o.last)) : null,
+      withRank ? h("td", { class: "num" }, o.last && o.last.placement != null ? `n° ${o.last.placement}` : "-") : null,
+      h("td", { class: "num muted" }, `${day(o.last_seen)} ${hour(o.last_seen)}`)))));
+
+  const parts = [d.opponents.length ? oppTable(d.opponents, true) : h("div", { class: "empty" }, "Aucun adversaire humain pour l'instant.")];
+  // les IA sont mises a part : pas de rang, et hors statistiques
+  if (d.bot_opponents.length) {
+    parts.push(h("h2", { class: "title" }, "Adversaires IA", h("small", {}, "hors statistiques")), oppTable(d.bot_opponents, false));
+  }
+  fill("opponents", ...parts);
+}
+
+// ------------------------------------------------------------ reglages
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "X-SPAM-Tracker": "1", "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
+  return data;
+}
+// ---- "Preparer les cartes" : suivi de progression (interroge le serveur pendant l'extraction)
+let prepTimer = null;
+function paintPrepare(p) {
+  const bar = document.getElementById("prep-bar"), msg = document.getElementById("prep-msg"), btn = document.getElementById("prep-btn");
+  if (!bar || !msg || !btn) return;
+  const running = p.state === "running";
+  bar.parentElement.hidden = !(running || p.state === "done");
+  bar.style.width = `${Math.round((p.progress || 0) * 100)}%`;
+  btn.disabled = running;
+  btn.textContent = running ? "Préparation..." : "Préparer les cartes";
+  msg.className = "d prep-msg" + (p.state === "error" ? " err" : p.state === "done" ? " ok" : "");
+  msg.textContent = running ? `${Math.round((p.progress || 0) * 100)} % · ${p.message}`
+    : p.state === "error" ? p.error
+    : p.state === "done" ? p.message : msg.textContent;
+}
+async function pollPrepare() {
+  clearTimeout(prepTimer);
+  try {
+    const p = await (await fetch("/api/prepare-status", { cache: "no-store" })).json();
+    paintPrepare(p);
+    if (p.state === "running") { prepTimer = setTimeout(pollPrepare, 1000); return; }
+    lastSig = null; refresh();          // termine : on recharge tout (noms et images)
+  } catch (e) { prepTimer = setTimeout(pollPrepare, 2000); }
+}
+async function startPrepare() {
+  try { await post("/api/prepare-cards"); pollPrepare(); }
+  catch (err) { paintPrepare({ state: "error", error: err.message }); }
+}
+async function saveGameDir(path) {
+  try { await post("/api/game-dir", { path }); lastSig = null; refresh(); }
+  catch (err) { const e = document.getElementById("game-err"); if (e) e.textContent = err.message; }
+}
+
+function renderSettings(d) {
+  const a = d.app, c = d.catalog, g = d.game || {}, p = d.prepare || { state: "idle" };
+  const input = h("input", { type: "checkbox", checked: a.autostart, disabled: !a.autostart_available, "aria-label": "Lancer au démarrage de Windows",
+    onchange: async e => { try { await post("/api/autostart", { enabled: e.target.checked }); } catch (err) { alert(err.message); } lastSig = null; refresh(); } });
+  const state = c.state === "ok" ? h("span", { class: "pill ok" }, "Prêtes")
+    : h("span", { class: "pill bad" }, { absent: "À préparer", illisible: "À refaire", perime: "À mettre à jour" }[c.state] || c.state);
+  const catText = c.state === "absent" || c.state === "illisible"
+    ? "Lit les fichiers du jeu installé pour afficher le nom et l'illustration de chaque carte. Compte quelques minutes et environ 2,5 Go d'espace libre temporaire (supprimé à la fin). Le jeu n'est jamais modifié."
+    : `${c.count} cartes, préparées le ${day(c.generated_utc)} à ${hour(c.generated_utc)}${c.reason ? ` · ${c.reason}` : ""}. ` +
+      `${d.images_total} illustration(s)${d.images_missing ? `, ${d.images_missing} manquante(s)` : ""}. À refaire après une mise à jour du jeu.`;
+  const pathInput = h("input", { class: "field", id: "game-path", type: "text", spellcheck: "false",
+    placeholder: "Dossier de SPAM (celui qui contient SPAM.exe)", value: g.origin === "choisi" ? g.dir || "" : "" });
+  const gameState = g.dir
+    ? h("span", { class: "pill ok" }, g.origin === "choisi" ? "Choisi" : "Détecté")
+    : h("span", { class: "pill bad" }, "Introuvable");
+  fill("settings",
+    h("div", { class: "setting" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Cartes", state), h("div", { class: "d" }, catText),
+        h("div", { class: "pbar", hidden: true }, h("b", { id: "prep-bar" })),
+        h("div", { class: "d prep-msg", id: "prep-msg" })),
+      h("button", { class: "btn", id: "prep-btn", disabled: !g.dir, onclick: startPrepare,
+        title: g.dir ? "" : "Indique d'abord le dossier du jeu" }, "Préparer les cartes")),
+    h("div", { class: "setting col" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Dossier du jeu", gameState),
+        h("div", { class: "d" }, g.dir ? g.dir : "SPAM n'a pas été trouvé dans tes bibliothèques Steam. Indique le dossier où il est installé (clic droit sur SPAM dans Steam > Gérer > Parcourir les fichiers locaux).")),
+      h("div", { class: "row-actions" }, pathInput,
+        a.can_browse ? h("button", { class: "btn", onclick: async () => {
+          try { const r = await post("/api/choose-game-dir"); if (r.path) { pathInput.value = r.path; saveGameDir(r.path); } }
+          catch (err) { document.getElementById("game-err").textContent = err.message; } } }, "Parcourir") : null,
+        h("button", { class: "btn", onclick: () => saveGameDir(pathInput.value) }, "Enregistrer"),
+        g.origin === "choisi" ? h("button", { class: "btn", onclick: () => saveGameDir("") }, "Détection auto") : null),
+      h("div", { class: "d err", id: "game-err" })),
+    h("div", { class: "setting" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Lancer au démarrage de Windows"),
+        h("div", { class: "d" }, a.autostart_available ? "Démarre discrètement dans la zone de notification." : "Disponible uniquement depuis SPAM-Tracker.exe.")),
+      h("label", { class: "switch" }, input, h("span"))),
+    h("div", { class: "setting" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Dossier des données"), h("div", { class: "d" }, a.data_dir)),
+      h("button", { class: "btn", onclick: () => post("/api/open-folder").catch(err => alert(err.message)) }, "Ouvrir")),
+    h("div", { class: "setting" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Fermer la fenêtre"),
+        h("div", { class: "d" }, "La fenêtre se range dans la zone de notification et le suivi continue. Pour tout arrêter : clic droit sur l'icône, Quitter."))),
+    h("div", { class: "setting" },
+      h("div", { class: "txt" }, h("div", { class: "t" }, "Versions"),
+        h("div", { class: "d" }, `SPAM Tracker ${a.version || "?"} · jeu détecté : ${g.current || "inconnu (aucun match encore)"} · ` +
+          `extraction des cartes vérifiée pour la version ${g.tested || "?"}` + (g.catalog ? ` · cartes préparées avec la version ${g.catalog}` : "")))));
+  paintPrepare(p);
+  if (p.state === "running" && !prepTimer) pollPrepare();
+}
+
+// ------------------------------------------------------------ rafraichissement
+async function refresh() {
+  const live = document.getElementById("live");
+  try {
+    const r = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    live.classList.remove("off");
+    document.getElementById("clock").textContent = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    // on ne reconstruit que si les donnees ont change (pas d'animation a chaque rafraichissement)
+    const sig = JSON.stringify(d);
+    if (sig === lastSig) return;
+    lastSig = sig;
+    const key = d.recent[0] ? d.recent[0].start_utc : "";
+    const animate = firstRender || key !== lastMatchKey;
+    firstRender = false; lastMatchKey = key;
+    CARDS.clear();
+    renderBanners(d); renderHome(d, animate); renderProgress(d.progress || [], animate); renderDecks(d); renderOpponents(d);
+    if (!document.getElementById("tab-settings").contains(document.activeElement)) renderSettings(d);
+  } catch (e) {
+    live.classList.add("off");
+    document.getElementById("clock").textContent = "hors ligne";
+  }
+}
+
+// onglets : bouton du rail ou lien #decks, #opponents, #settings
+const TABS = ["home", "decks", "opponents", "settings"];
+function showTab(tab) {
+  if (!TABS.includes(tab)) tab = "home";
+  document.querySelectorAll(".rail nav button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
+  document.querySelectorAll("main section").forEach(s => {
+    const on = s.id === "tab-" + tab;
+    s.hidden = !on;
+    s.classList.toggle("enter", on);
+  });
+  hideTip();
+  document.getElementById("ctip").classList.remove("on");
+  // un onglet cache n'a pas de largeur : on redessine le graphique a son retour
+  if (tab === "home") renderProgress(progData, false);
+  if (location.hash !== "#" + tab) history.replaceState(null, "", tab === "home" ? location.pathname : "#" + tab);
+  scrollTo({ top: 0 });
+}
+document.querySelectorAll(".rail nav button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+if (location.hash) showTab(location.hash.slice(1));
+
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

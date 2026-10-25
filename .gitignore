@@ -1,0 +1,43 @@
+# --- Donnees personnelles : ne JAMAIS publier ---
+# Base des matchs, journaux, reglages locaux
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+settings.json
+# Replays du jeu : leur en-tete contient l'AccountId et le ticket de connexion
+*.srpl
+archive/
+index.json
+Player*.log
+
+# --- Contenu du jeu (propriete de Ticroco) : genere localement, jamais publie ---
+catalog.json
+cards/
+tmp-jeu/
+resources.assets
+resources.assets.resS
+globalgamemanagers
+globalgamemanagers.assets
+*.assets
+*.resS
+
+# --- Fichiers de compilation et environnements ---
+.venv/
+venv/
+build/
+dist/
+*.exe
+*.spec
+icon.ico
+__pycache__/
+*.pyc
+webview-cache/
+
+# --- Divers ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
