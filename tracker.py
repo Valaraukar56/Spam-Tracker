@@ -740,7 +740,7 @@ def card_info(uid):
             "rarity": c.get("rarity"), "hp": c.get("hp"), "image": has_image}
 
 
-def dashboard_data(recent_limit=30):
+def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique), avec une limite de securite
     """Toutes les donnees affichees par l'interface (jamais d'AccountId ni de ticket)."""
     reload_catalog_if_changed()
     db = open_db()

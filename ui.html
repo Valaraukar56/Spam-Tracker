@@ -298,6 +298,21 @@
   .mode-tag { display: block; font: 500 11px var(--display); letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint); margin-top: 1px; }
   .prog-note { color: var(--muted); font: italic 13.5px var(--serif); margin: -6px 0 10px; }
 
+  /* ------------------------------------------------------------ historique : filtres Toutes / Normal / Classe */
+  .seg-bar { display: inline-flex; gap: 4px; padding: 4px; margin: 0 0 18px; border-radius: 999px;
+    background: var(--ink-2); border: 1px solid var(--hair); }
+  .seg { background: none; border: 0; cursor: pointer; padding: 8px 16px; border-radius: 999px;
+    color: var(--muted); font: 600 12px var(--display); letter-spacing: 1.6px; text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 8px; transition: background .2s, color .2s; }
+  .seg:hover { color: var(--paper); }
+  .seg[aria-selected="true"] { background: var(--felt-2); color: var(--brass); box-shadow: inset 0 0 0 1px var(--hair-2); }
+  .seg-n { font: 500 11px var(--display); letter-spacing: 0; color: var(--faint); background: rgba(255, 255, 255, .05);
+    padding: 1px 7px; border-radius: 999px; }
+  .seg[aria-selected="true"] .seg-n { color: var(--paper); }
+  .more { display: block; margin: 18px auto 0; }
+  .rail { overflow-y: auto; scrollbar-width: none; }   /* 5 onglets : defile si la fenetre est tres basse */
+  .rail::-webkit-scrollbar { display: none; }
+
   /* ------------------------------------------------------------ historique */
   .log { display: flex; flex-direction: column; }
   .match { display: grid; grid-template-columns: 74px 110px minmax(120px, 1fr) auto auto 92px; align-items: center;
@@ -407,6 +422,7 @@
   <div class="mono" aria-hidden="true"><span>S</span></div>
   <nav role="tablist" aria-label="Sections">
     <button role="tab" data-tab="home" aria-selected="true">Accueil</button>
+    <button role="tab" data-tab="history" aria-selected="false">Historique</button>
     <button role="tab" data-tab="decks" aria-selected="false">Decks</button>
     <button role="tab" data-tab="opponents" aria-selected="false">Adversaires</button>
     <button role="tab" data-tab="settings" aria-selected="false">Réglages</button>
@@ -424,7 +440,12 @@
     <h2 class="title">Progression <small>position au classement, au début de chaque match</small>
       <button class="btn" id="prog-toggle" aria-pressed="false">Tableau</button></h2>
     <div id="progress"></div>
-    <h2 class="title">Historique <small id="log-count"></small></h2>
+  </section>
+
+  <section id="tab-history" hidden>
+    <div class="kicker">Toutes mes parties</div>
+    <h2 class="title" style="margin-top:10px">Historique <small id="hist-summary"></small></h2>
+    <div class="seg-bar" id="hist-filter" role="tablist" aria-label="Filtrer par mode"></div>
     <div class="log" id="log"></div>
   </section>
 
@@ -607,8 +628,20 @@ function renderHome(d, animate) {
       h("div", { class: "seismo", "aria-label": "Forme récente" }, form.map((x, i) =>
         h("i", { class: x.result, style: `--i:${i}`, title: `${LABELS[x.result]} contre ${x.opponent} · ${day(x.start_utc)}` }))))));
 
-  fill("log-count", d.recent.length ? `${plural(d.recent.length, "match")} affiché${d.recent.length > 1 ? "s" : ""}` : "");
-  fill("log", d.recent.length ? h("div", {}, d.recent.map(x => h("div", { class: "match " + x.result },
+}
+
+// ------------------------------------------------------------ historique (onglet) : Toutes / Normal / Classe
+const HIST_FILTERS = {
+  all: { label: "Toutes", test: () => true, empty: "Aucun match enregistré pour l'instant." },
+  normal: { label: "Normal", test: m => m.mode === 0, empty: "Aucune partie en mode Normal pour l'instant." },
+  ranked: { label: "Classé", test: m => m.mode === 10, empty: "Aucune partie classée pour l'instant." },
+};
+const HIST_PAGE = 50;
+let histMode = "all", histShown = HIST_PAGE, histData = [];
+try { const saved = localStorage.getItem("spam.histMode"); if (HIST_FILTERS[saved]) histMode = saved; } catch (e) { /* stockage indisponible */ }
+
+function matchRow(x) {
+  return h("div", { class: "match " + x.result },
     h("div", { class: "date" }, day(x.start_utc), h("br"), hour(x.start_utc)),
     h("div", { class: "res" }, LABELS[x.result], h("span", { class: "mode-tag" }, x.mode_name)),
     h("div", { class: "who" }, x.opponent || "?", x.is_ai ? h("span", { class: "tag" }, "IA") : null,
@@ -617,7 +650,36 @@ function renderHome(d, animate) {
     h("div", { class: "versus" }, h("div", { class: "mini" }, byName(x.my_deck).map(c => card(c, "xs"))), h("em", {}, "vs"),
       h("div", { class: "mini" }, byName(x.opp_deck).map(c => card(c, "xs")))),
     h("div", {}),
-    h("div", { class: "num" }, h("b", {}, plural(x.turns ?? 0, "tour")), h("br"), dur(x.duration_s))))) : h("div", { class: "empty" }, "Rien pour l'instant."));
+    h("div", { class: "num" }, h("b", {}, plural(x.turns ?? 0, "tour")), h("br"), dur(x.duration_s)));
+}
+
+function renderHistory(matches) {
+  histData = matches;
+  const setMode = k => {
+    histMode = k; histShown = HIST_PAGE;
+    try { localStorage.setItem("spam.histMode", k); } catch (e) { /* sans importance */ }
+    renderHistory(histData);
+  };
+  fill("hist-filter", ...Object.entries(HIST_FILTERS).map(([k, f]) =>
+    h("button", { class: "seg", role: "tab", "aria-selected": String(k === histMode), onclick: () => setMode(k) },
+      f.label, h("span", { class: "seg-n" }, matches.filter(f.test).length))));
+
+  const list = matches.filter(HIST_FILTERS[histMode].test);
+  // bilan de la vue : les parties contre l'IA sont listees mais hors bilan
+  const humans = list.filter(m => !m.is_ai), bots = list.length - humans.length;
+  const w = humans.filter(m => m.result === "victoire").length, l = humans.filter(m => m.result === "defaite").length;
+  const dr = humans.length - w - l;
+  fill("hist-summary", humans.length
+    ? `${plural(humans.length, "partie")} · ${w} V · ${l} D${dr ? ` · ${dr} N` : ""} · ${pct(100 * w / humans.length)} % de victoires` +
+      (bots ? ` · + ${bots} contre l'IA, hors bilan` : "")
+    : bots ? `${plural(bots, "partie")} contre l'IA` : "");
+
+  const rest = list.length - histShown;
+  fill("log", list.length
+    ? h("div", {}, list.slice(0, histShown).map(matchRow),
+        rest > 0 ? h("button", { class: "btn more", onclick: () => { histShown += 100; renderHistory(histData); } },
+          `Afficher plus (${rest} restant${rest > 1 ? "s" : ""})`) : null)
+    : h("div", { class: "empty" }, HIST_FILTERS[histMode].empty));
 }
 
 // ------------------------------------------------------------ progression : position au classement
@@ -963,7 +1025,8 @@ async function refresh() {
     const animate = firstRender || key !== lastMatchKey;
     firstRender = false; lastMatchKey = key;
     CARDS.clear();
-    renderBanners(d); renderHome(d, animate); renderProgress(d.progress || [], animate); renderDecks(d); renderOpponents(d);
+    renderBanners(d); renderHome(d, animate); renderProgress(d.progress || [], animate); renderHistory(d.recent);
+    renderDecks(d); renderOpponents(d);
     if (!document.getElementById("tab-settings").contains(document.activeElement)) renderSettings(d);
   } catch (e) {
     live.classList.add("off");
@@ -972,7 +1035,7 @@ async function refresh() {
 }
 
 // onglets : bouton du rail ou lien #decks, #opponents, #settings
-const TABS = ["home", "decks", "opponents", "settings"];
+const TABS = ["home", "history", "decks", "opponents", "settings"];
 function showTab(tab) {
   if (!TABS.includes(tab)) tab = "home";
   document.querySelectorAll(".rail nav button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
