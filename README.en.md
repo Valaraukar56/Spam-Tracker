@@ -21,7 +21,11 @@ interface is in French.*
   duration, opponent, rank.
 - **Keeps your whole history** in a local database. The game itself only keeps your last 10 matches.
 - **Home**: last match face-off, record, current streak, recent form and leaderboard position chart.
-- **Decks**: your decks with win rates, and your best performing cards.
+- **History**: all your games, filtered by All / Casual / Ranked. Click a game to see its details: who
+  started, how it ended, damage, healing and kills of each card, talents, in-game purchases and the HP
+  chart of both players.
+- **Decks**: your decks (grouped by starting cards, even when a card transforms during the game), win
+  rate when you start or not, matchups against each opposing deck, and average stats per card.
 - **Opponents**: the cards that beat you most often and the players you met. Games against the AI
   are kept separate.
 - **Card art**: after clicking "Préparer les cartes" (Prepare cards), cards show their name and

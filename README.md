@@ -22,7 +22,12 @@ illustrations inventés).*
 - **Garde tout l'historique** dans une base locale. Le jeu, lui, ne conserve que tes 10 derniers matchs.
 - **Accueil** : le dernier match en face-à-face, ton bilan, ta série en cours, ta forme récente et
   l'évolution de ta position au classement.
-- **Decks** : tes decks avec leur taux de victoire et les cartes qui te réussissent le plus.
+- **Historique** : toutes tes parties, avec un filtre Toutes / Normal / Classé. Un clic sur une partie
+  affiche son détail : qui a commencé, comment elle s'est terminée, les dégâts, soins et éliminations
+  de chaque carte, les talents, les achats en partie et la courbe des PV des deux joueurs.
+- **Decks** : tes decks (regroupés par cartes de départ, même si une carte se transforme en cours de
+  partie), leur taux de victoire quand tu commences ou non, les matchups contre chaque deck adverse,
+  et les stats moyennes de chaque carte.
 - **Adversaires** : les cartes qui te battent le plus souvent et les joueurs rencontrés. Les parties
   contre l'IA sont mises à part.
 - **Cartes illustrées** : après un clic sur "Préparer les cartes", les cartes s'affichent avec leur
