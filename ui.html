@@ -1215,6 +1215,12 @@ async function refresh() {
     CARDS.clear();
     renderBanners(d); renderHome(d, animate); renderProgress(d.progress || [], animate); renderHistory(d.recent);
     renderDecks(d); renderOpponents(d);
+    // lien #history/<match> : ouvre le detail de ce match des que l'historique est charge
+    if (pendingDetail && d.recent.some(m => m.uid === pendingDetail)) {
+      const uid = pendingDetail;
+      pendingDetail = null;
+      if (histOpen !== uid) toggleDetail(uid);
+    }
     if (!document.getElementById("tab-settings").contains(document.activeElement)) renderSettings(d);
   } catch (e) {
     live.classList.add("off");
@@ -1222,10 +1228,13 @@ async function refresh() {
   }
 }
 
-// onglets : bouton du rail ou lien #decks, #opponents, #settings
+// onglets : bouton du rail ou lien #decks, #opponents, #settings, #history/<match>
 const TABS = ["home", "history", "decks", "opponents", "settings"];
-function showTab(tab) {
+let pendingDetail = null;
+function showTab(target) {
+  let [tab, arg] = String(target || "").split("/");
   if (!TABS.includes(tab)) tab = "home";
+  if (tab === "history" && arg) pendingDetail = decodeURIComponent(arg);
   document.querySelectorAll(".rail nav button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
   document.querySelectorAll("main section").forEach(s => {
     const on = s.id === "tab-" + tab;

@@ -35,6 +35,8 @@ illustrations inventés).*
 - Se range dans la **zone de notification** quand on ferme la fenêtre, et peut se lancer au démarrage
   de Windows.
 
+![Historique : détail d'une partie (stats par carte, talents, achats, courbe des PV)](docs/screenshots/history.png)
+
 | Decks | Adversaires | Réglages |
 |---|---|---|
 | ![Decks](docs/screenshots/decks.png) | ![Adversaires](docs/screenshots/opponents.png) | ![Réglages](docs/screenshots/settings.png) |

@@ -32,6 +32,8 @@ interface is in French.*
   illustration.
 - Closing the window keeps it running in the **notification area**. It can also start with Windows.
 
+![History: game details (per-card stats, talents, purchases, HP chart)](docs/screenshots/history.png)
+
 | Decks | Opponents | Settings |
 |---|---|---|
 | ![Decks](docs/screenshots/decks.png) | ![Opponents](docs/screenshots/opponents.png) | ![Settings](docs/screenshots/settings.png) |
