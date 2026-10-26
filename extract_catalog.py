@@ -40,6 +40,7 @@ TESTED_GAME_VERSION = "1.26"
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 ILLUSTRATION_RE = re.compile(rb"Sprites/Card/Illustration/[A-Za-z0-9_]+")
+TALENT_ID_RE = re.compile(rb"\$\x00\x00\x00([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 
 class ExtractError(Exception):
@@ -345,11 +346,15 @@ def extract(game_dir, out_dir, images=True, progress=None, log=print,
         rarities = {pid: safe(read_tag, raw, "").replace("rarity-", "") or None
                     for pid, raw in by_class.get("RarityData", {}).items()}
         abilities = {pid: safe(read_name, raw) for pid, raw in by_class.get("AbilityData", {}).items()}
-        talents = {}
+        talents, talents_by_id = {}, {}
         for pid, raw in by_class.get("TalentData", {}).items():
             key = safe(read_name, raw)
             if key:
                 talents[pid] = tr.get(f"Talent.Name.{key}", key)
+                # identifiant du talent (premier UUID apres le nom) : celui cite dans les replays
+                m = TALENT_ID_RE.search(raw, 28)
+                if m:
+                    talents_by_id[m.group(1).decode()] = talents[pid]
 
         cards, partial = {}, 0
         for raw in by_class["CardData"].values():
@@ -404,6 +409,7 @@ def extract(game_dir, out_dir, images=True, progress=None, log=print,
             "tested_with": TESTED_GAME_VERSION,
             "count": len(cards),
             "cards": dict(sorted(cards.items(), key=lambda kv: kv[1]["name"].lower())),
+            "talents": talents_by_id,   # uuid du talent -> nom francais
         }
         catalog = out_dir / "catalog.json"
         tmp = catalog.with_suffix(".tmp")

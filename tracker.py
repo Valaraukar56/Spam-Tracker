@@ -268,7 +268,7 @@ def migrate(db):
     ne sont jamais modifiees : my_rank / opponent_rank = position au classement.
     """
     cols = {r[1] for r in db.execute("PRAGMA table_info(matches)")}
-    all_columns = INTERP_COLUMNS | EXTRA_RAW_COLUMNS
+    all_columns = INTERP_COLUMNS | EXTRA_RAW_COLUMNS | DETAIL_COLUMNS
     missing = [c for c in all_columns if c not in cols]
     if missing and db.execute("SELECT COUNT(*) FROM matches").fetchone()[0]:
         backup = DB_PATH.with_name(f"spam.avant-migration.{datetime.now():%Y%m%d-%H%M%S}.db")
@@ -322,6 +322,7 @@ def open_db():
             imported_at     TEXT
         )
     """)
+    db.executescript(DETAIL_TABLES)       # details de fin de partie et stats par carte
     db.commit()
     migrate(db)
     return db
@@ -489,10 +490,168 @@ def fill_start_decks(db, index_path):
     return done
 
 
+# ---------------------------------------------------------------- details de fin de partie (replays .srpl)
+#
+# Le dernier message du replay (type 2001 = GameEnd) contient le resume JSON que le jeu envoie au
+# serveur : qui commence, cause de fin, stats par carte (degats, soins, eliminations, talent),
+# PV par tour, boutique et achats. Les identifiants de comptes qu'il contient servent seulement a
+# savoir quel cote est le mien (en memoire) : ils ne sont jamais enregistres.
+
+DETAILS_VERSION = 1
+DETAIL_COLUMNS = {"starter": "TEXT", "end_cause": "TEXT"}   # 'me' / 'opp' ; 'surrender', 'normal'...
+DETAIL_TABLES = """
+CREATE TABLE IF NOT EXISTS match_details (
+    game_uid TEXT PRIMARY KEY,
+    version  INTEGER,
+    data     TEXT                    -- JSON nettoye, NULL si le replay est introuvable
+);
+CREATE TABLE IF NOT EXISTS card_stats (
+    game_uid TEXT, side TEXT, card TEXT,   -- side : 'me' ou 'opp' ; card : carte de depart
+    damage INTEGER, heal INTEGER, kills INTEGER, alive INTEGER,
+    talent_id TEXT, talent_name TEXT,
+    PRIMARY KEY (game_uid, side, card)
+);
+"""
+
+
+def srpl_messages(path):
+    """Messages [(temps_ms, donnees)] d'un replay au format du jeu (MatchReplay v2), ou None."""
+    import gzip
+    import io
+    import struct
+    try:
+        with gzip.open(path) as f:
+            buf = io.BytesIO(f.read(64_000_000))
+        if buf.read(4) != b"SRPL" or struct.unpack("<i", buf.read(4))[0] != 2:
+            return None
+        size = shift = 0                     # longueur de l'en-tete JSON (entier 7 bits .NET)
+        while True:
+            b = buf.read(1)[0]
+            size |= (b & 0x7F) << shift
+            shift += 7
+            if b < 0x80:
+                break
+        buf.seek(size, 1)                    # en-tete ignore : il contient l'AccountId et le ticket
+        count = struct.unpack("<i", buf.read(4))[0]
+        out = []
+        for _ in range(max(0, count)):
+            t, n = struct.unpack("<ii", buf.read(8))
+            out.append((t, buf.read(n)))
+        return out
+    except (OSError, EOFError, ValueError, IndexError, struct.error):
+        return None
+
+
+def end_summary(msgs):
+    """Resume JSON de fin de partie (CompleteMatchRequest) du message GameEnd, ou None."""
+    for _, data in reversed(msgs or []):
+        if data[:2] == b"\xd1\x07":           # 2001 = GameEnd ; chaines .NET en UTF-16
+            text = data.decode("utf-16-le", errors="ignore")
+            i = text.find('{"tid"')
+            if i >= 0:
+                try:
+                    return json.JSONDecoder().raw_decode(text[i:])[0]
+                except ValueError:
+                    return None
+    return None
+
+
+def match_details(summary, my_id, my_start, opp_start):
+    """Resume nettoye, vu de mon cote : {"starter", "end_cause", "me": {...}, "opp": {...}}."""
+    if not summary or not my_id:
+        return None
+    i_won = summary.get("winner") == my_id
+    if not i_won and summary.get("loser") != my_id:
+        return None                           # ce resume ne concerne pas mon compte
+    suffix = {"me": "Winner" if i_won else "Loser", "opp": "Loser" if i_won else "Winner"}
+    starts = {"me": my_start or [], "opp": opp_start or []}
+    starter = summary.get("starter")
+    out = {"v": DETAILS_VERSION, "starter": ("me" if starter == my_id else "opp") if starter else None,
+           "end_cause": summary.get("endCause"), "turns": summary.get("turnCount"),
+           "draw": bool(summary.get("isDraw"))}
+    num = lambda v: int(v) if isinstance(v, (int, float)) else 0
+    for side, sfx in suffix.items():
+        cards = [{"card": c.get("id"), "alive": bool(c.get("isAlive")),
+                  "talent_id": c.get("talentId") or None, "talent_name": c.get("talentName") or None,
+                  "damage": num(c.get("damage")), "heal": num(c.get("heal")), "kills": num(c.get("kills"))}
+                 for c in summary.get("cards" + sfx) or [] if isinstance(c, dict)]
+        # carte transformee pendant la partie : ses stats sont rattachees a la carte de depart
+        start = starts[side]
+        gone = [u for u in start if u not in {c["card"] for c in cards}]
+        new = [c for c in cards if start and c["card"] not in start]
+        if len(gone) == 1 and len(new) == 1:
+            new[0]["became"], new[0]["card"] = new[0]["card"], gone[0]
+        stats = summary.get("matchStats" + sfx) or {}
+        out[side] = {
+            "damage": num(summary.get("totalDamage" + sfx)), "heal": num(summary.get("totalHeal" + sfx)),
+            "cards": cards, "hp": [num(x) for x in (stats.get("hp") or [])][:1001],
+            "shops": num(stats.get("shops")), "rerolls": num(stats.get("rerolls")),
+            "skips": num(stats.get("skips")), "bans": len(stats.get("bans") or []),
+            "turn_time_ms": num(stats.get("turnTimeMs")), "timeouts": num(stats.get("timeouts")),
+            "disconnects": num(stats.get("disconnects")), "purchases": [],
+        }
+    for p in summary.get("toxPurchases") or []:
+        if isinstance(p, dict):
+            side = "me" if p.get("userId") == my_id else "opp"
+            out[side]["purchases"].append({"card": p.get("card"), "cost": num(p.get("cost")), "turn": num(p.get("turn"))})
+    return out
+
+
+def _deck(value):
+    try:
+        deck = json.loads(value) if value else None
+    except ValueError:
+        return None
+    return deck or None
+
+
+def fill_match_details(db, index_path, folders):
+    """Lit le resume de fin de partie des matchs qui ne l'ont pas encore. Renvoie le nombre traite."""
+    todo = db.execute("""SELECT m.game_uid, m.my_start_deck, m.opponent_start_deck FROM matches m
+                         LEFT JOIN match_details d ON d.game_uid = m.game_uid
+                         WHERE d.game_uid IS NULL OR d.version < ?""", (DETAILS_VERSION,)).fetchall()
+    if not todo:
+        return 0
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    entries = [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
+    in_index = {m.get("GameUid") for m in entries}
+    my_id = next((m["AccountId"] for m in entries if m.get("AccountId")), None)   # en memoire seulement
+    if not my_id:
+        return 0
+    done = 0
+    for uid, my_start, opp_start in todo:
+        if not GAME_UID_RE.match(uid or ""):
+            continue
+        src = next((f / f"{uid}.srpl" for f in folders if (f / f"{uid}.srpl").exists()), None)
+        if src is None:
+            if uid not in in_index:   # replay supprime par le jeu : pas de detail pour ce match
+                db.execute("INSERT OR REPLACE INTO match_details VALUES (?, ?, NULL)", (uid, DETAILS_VERSION))
+            continue
+        det = match_details(end_summary(srpl_messages(src)), my_id, _deck(my_start), _deck(opp_start))
+        db.execute("INSERT OR REPLACE INTO match_details VALUES (?, ?, ?)",
+                   (uid, DETAILS_VERSION, json.dumps(det, ensure_ascii=False) if det else None))
+        db.execute("DELETE FROM card_stats WHERE game_uid = ?", (uid,))
+        if det:
+            db.execute("UPDATE matches SET starter = ?, end_cause = ? WHERE game_uid = ?",
+                       (det["starter"], det["end_cause"], uid))
+            for side in ("me", "opp"):
+                for c in det[side]["cards"]:
+                    db.execute("INSERT OR REPLACE INTO card_stats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                               (uid, side, c["card"], c["damage"], c["heal"], c["kills"], int(c["alive"]),
+                                c["talent_id"], c["talent_name"]))
+        done += 1
+    db.commit()
+    return done
+
+
 # ---------------------------------------------------------------- catalogue des cartes
 
 CATALOG = {}          # uuid -> nom, rempli par load_catalog()
 CARDS = {}            # uuid -> fiche complete (element, rarete, PV...)
+TALENTS = {}          # uuid du talent -> nom francais
 CATALOG_LOADED = False
 CATALOG_INFO = {"error": None, "generated_utc": None, "mtime": None, "game_version": None}
 
@@ -505,6 +664,8 @@ def load_catalog():
         data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
         CARDS = dict(data["cards"])
         CATALOG = {uid: c["name"] for uid, c in CARDS.items()}
+        TALENTS.clear()
+        TALENTS.update(data.get("talents") or {})   # uuid du talent -> nom francais
         CATALOG_LOADED = True
         CATALOG_INFO.update(error=None, generated_utc=data.get("generated_utc"), mtime=mtime,
                             game_version=data.get("game_version"))
@@ -626,6 +787,7 @@ def watch(stop=None):
                     continue  # on garde l'ancien mtime pour reessayer
                 last_mtime = mtime
                 filled = fill_start_decks(db, index_path)
+                fill_match_details(db, index_path, [index_path.parent])
                 if filled and first_sync:
                     print(f"Decks de depart retrouves dans les replays pour {filled} match(s).")
 
@@ -835,9 +997,15 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             SELECT start_utc, duration_s, opponent_id, opponent_name, opponent_is_ai,
                    opponent_rank, opponent_stars, my_rank, my_stars, result, turns,
                    {MY_DECK_SQL}, {OPP_DECK_SQL}, game_mode, mode_name,
-                   my_tier, my_tier_stars, opponent_tier, opponent_tier_stars
+                   my_tier, my_tier_stars, opponent_tier, opponent_tier_stars,
+                   game_uid, starter, end_cause
             FROM matches ORDER BY start_utc DESC
         """.format(MY_DECK_SQL=MY_DECK_SQL, OPP_DECK_SQL=OPP_DECK_SQL)).fetchall()
+        # moyennes de mes cartes (degats, soins, eliminations), contre des humains seulement
+        card_avg = {r[0]: r[1:] for r in db.execute("""
+            SELECT cs.card, COUNT(*), SUM(cs.damage), SUM(cs.heal), SUM(cs.kills)
+            FROM card_stats cs JOIN matches m ON m.game_uid = cs.game_uid
+            WHERE cs.side = 'me' AND m.opponent_is_ai = 0 GROUP BY cs.card""")}
     finally:
         db.close()
 
@@ -855,6 +1023,7 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             "me": standing(r[8], r[7], r[15], r[16]),
             "opp": standing(r[6], r[5], r[17], r[18]),
             "my_deck": json.loads(r[11] or "[]"), "opp_deck": json.loads(r[12] or "[]"),
+            "uid": r[19], "starter": r[20], "end_cause": r[21],
         })
 
     def tally():
@@ -870,6 +1039,14 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
     def rate(t):
         return round(100 * t["victoire"] / t["games"], 1) if t["games"] else 0
 
+    def with_rate(t):
+        return t | {"winrate": rate(t)} if t and t["games"] else None
+
+    def avg(uid):
+        n, dmg, heal, kills = card_avg.get(uid, (0, 0, 0, 0))
+        return {"games": n, "damage": round(dmg / n), "heal": round(heal / n),
+                "kills": round(kills / n, 1)} if n else None
+
     # Les parties contre l'IA sont mises a part : elles ne comptent pas dans les statistiques
     humans = [m for m in matches if not m["is_ai"]]
     bots = [m for m in matches if m["is_ai"]]
@@ -884,11 +1061,22 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             streak["n"] += 1
 
     decks, my_cards, opp_cards = {}, {}, {}
+    starts = {}                                  # (deck, 'me' | 'opp') -> bilan selon qui commence
+    by_start = {"me": tally(), "opp": tally()}   # global
+    matchups = {}                                # (mon deck, deck adverse) -> bilan
     for m in humans:
         key = tuple(sorted(m["my_deck"]))
         for bucket in (decks.setdefault(key, tally()),
                        *(my_cards.setdefault(u, tally()) for u in set(m["my_deck"])),
                        *(opp_cards.setdefault(u, tally()) for u in set(m["opp_deck"]))):
+            bucket["games"] += 1
+            bucket[m["result"]] += 1
+        extra = []
+        if m["starter"] in ("me", "opp"):
+            extra += [starts.setdefault((key, m["starter"]), tally()), by_start[m["starter"]]]
+        if m["opp_deck"]:
+            extra.append(matchups.setdefault((key, tuple(sorted(m["opp_deck"]))), tally()))
+        for bucket in extra:
             bucket["games"] += 1
             bucket[m["result"]] += 1
 
@@ -923,6 +1111,8 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             "bots": record(bots) | {"winrate": rate(record(bots))},
             # mon dernier etat connu (rang calcule depuis les etoiles + position au classement)
             "me": matches[0]["me"] if matches else None,
+            # taux de victoire quand je commence / quand l'adversaire commence
+            "first": with_rate(by_start["me"]), "second": with_rate(by_start["opp"]),
         },
         "recent": matches[:recent_limit],
         # evolution de mes etoiles et de ma position au classement (au debut de chaque match)
@@ -930,10 +1120,14 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
                       "tier": m["me"]["tier"], "tier_name": m["me"]["tier_name"], "mode_name": m["mode_name"],
                       "result": m["result"], "opponent": m["opponent"], "is_ai": m["is_ai"]}
                      for m in reversed(matches)][-300:],
-        "decks": sorted(({"cards": [card_info(u) for u in k], **t, "winrate": rate(t)}
+        "decks": sorted(({"cards": [card_info(u) for u in k], **t, "winrate": rate(t),
+                          "first": with_rate(starts.get((k, "me"))), "second": with_rate(starts.get((k, "opp")))}
                          for k, t in decks.items()), key=lambda d: (-d["games"], -d["winrate"])),
-        "my_cards": sorted(({"card": card_info(u), **t, "winrate": rate(t)} for u, t in my_cards.items()),
-                           key=lambda c: (-c["victoire"], -c["winrate"])),
+        "matchups": sorted(({"me": [card_info(u) for u in a], "opp": [card_info(u) for u in b], **t,
+                             "winrate": rate(t)} for (a, b), t in matchups.items()),
+                           key=lambda x: (-x["games"], -x["winrate"]))[:300],
+        "my_cards": sorted(({"card": card_info(u), **t, "winrate": rate(t), "avg": avg(u)}
+                            for u, t in my_cards.items()), key=lambda c: (-c["victoire"], -c["winrate"])),
         "beaters": sorted(({"card": card_info(u), "faced": t["games"], "losses": t["defaite"],
                             "loss_rate": round(100 * t["defaite"] / t["games"], 1)}
                            for u, t in opp_cards.items() if t["defaite"]),
@@ -947,6 +1141,34 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
         "images_total": len(list(CARDS_DIR.glob("*.webp"))) if CARDS_DIR.is_dir() else 0,
         "images_missing": sum(1 for u in CARDS if not (CARDS_DIR / f"{u}.webp").exists()),
     }
+
+
+def match_view(game_uid):
+    """Detail d'un match pour l'interface (resume de fin de partie, sans identifiant de compte)."""
+    if not GAME_UID_RE.match(game_uid or ""):
+        return None
+    reload_catalog_if_changed()
+    db = open_db()
+    try:
+        row = db.execute("SELECT data FROM match_details WHERE game_uid = ?", (game_uid,)).fetchone()
+        match = db.execute("SELECT result FROM matches WHERE game_uid = ?", (game_uid,)).fetchone()
+    finally:
+        db.close()
+    if not match:
+        return None
+    if not row or not row[0]:
+        return {"available": False, "result": match[0]}
+    det = json.loads(row[0])
+    best = max((c["damage"] for s in ("me", "opp") for c in det[s]["cards"]), default=0)
+    for side in ("me", "opp"):
+        for c in det[side]["cards"]:
+            c["info"] = card_info(c["card"])
+            c["talent"] = TALENTS.get(c.get("talent_id") or "", c.get("talent_name"))
+            c["mvp"] = best > 0 and c["damage"] == best        # carte qui a fait le plus de degats
+            c.pop("became", None)        # seul le deck de depart est affiche
+        for p in det[side]["purchases"]:
+            p["info"] = card_info(p["card"]) if p.get("card") else None
+    return {"available": True, "result": match[0], **det}
 
 
 if __name__ == "__main__":

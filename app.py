@@ -358,6 +358,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, data)
         elif self.path == "/api/prepare-status":
             self._send(200, PREP.snapshot())
+        elif self.path.startswith("/api/match/"):
+            # detail d'un match : /api/match/<GameUid> (nom valide avant toute lecture)
+            view = tracker.match_view(self.path[len("/api/match/"):])
+            if view is None:
+                self._send(404, {"error": "match introuvable"})
+                return
+            self._send(200, view)
         elif self.path.startswith("/cards/"):
             # /cards/<uuid>.webp uniquement : le nom est valide avant de toucher au disque
             name = self.path[len("/cards/"):]

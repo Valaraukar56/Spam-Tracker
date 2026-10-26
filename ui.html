@@ -313,6 +313,50 @@
   .rail { overflow-y: auto; scrollbar-width: none; }   /* 5 onglets : defile si la fenetre est tres basse */
   .rail::-webkit-scrollbar { display: none; }
 
+  /* ------------------------------------------------------------ detail d'un match */
+  :root { --hp-me: #b38c44; --hp-opp: #5b8fd6; }   /* paire validee sur fond sombre */
+  .match.clickable { cursor: pointer; outline: none; }
+  .match.clickable:focus-visible { box-shadow: inset 0 0 0 1px var(--brass-dim); }
+  .match[aria-expanded="true"] { background: linear-gradient(90deg, rgba(216, 180, 106, .06), transparent); }
+  .detail { margin: 0 0 14px 16px; padding: 18px 20px 20px; border-left: 2px solid var(--hair-2);
+    background: linear-gradient(180deg, rgba(255, 255, 255, .02), transparent); border-radius: 0 0 12px 0;
+    animation: rise .3s var(--ease) both; }
+  .det-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .det-chip { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--hair-2); color: var(--paper);
+    font-size: 12.5px; background: var(--ink-2); }
+  .det-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1060px) { .det-grid { grid-template-columns: 1fr; } }
+  .det-side { border: 1px solid var(--hair); border-radius: 12px; padding: 12px 14px 10px; background: var(--ink-2); }
+  .det-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .det-who { font: 600 12px var(--display); letter-spacing: 2px; text-transform: uppercase; display: inline-flex; align-items: center; gap: 8px; }
+  .det-who::before { content: ""; width: 14px; height: 2px; border-radius: 1px; background: var(--key); }
+  .det-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) repeat(3, 62px); gap: 10px; align-items: center;
+    padding: 7px 0; border-top: 1px solid var(--hair); }
+  .det-row .nm { font: 500 14px/1.2 var(--serif); overflow-wrap: anywhere; }
+  .det-row .nm small { display: block; font: 12px var(--display); color: var(--muted); }
+  .det-row .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .det-row .v small { display: block; font-size: 10.5px; color: var(--faint); letter-spacing: .8px; text-transform: uppercase; }
+  .det-row.dead .nm { color: var(--muted); }
+  .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font: 600 10px/1.6 var(--display);
+    letter-spacing: 1px; color: var(--ink); background: var(--brass); vertical-align: 2px; }
+  .badge.out { color: var(--muted); background: none; border: 1px solid var(--hair-2); }
+  .det-note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .hp-box { margin-top: 16px; }
+  .hp-box svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .hp-box svg text { fill: var(--muted); font: 11px var(--display); }
+  .hp-box svg text.end { fill: var(--paper); font-weight: 600; }
+  .hp-legend { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .hp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .hp-legend i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+  .hp-caption { font-size: 12.5px; color: var(--muted); min-height: 1.4em; margin-top: 2px; }
+  .hp-caption b { color: var(--paper); font-weight: 500; }
+
+  /* ------------------------------------------------------------ onglet Decks : matchups */
+  .deck-start { color: var(--muted); font-size: 13px; margin: -8px 0 16px; }
+  .deck-start b { color: var(--paper); font-weight: 500; }
+  .mu-vs { display: flex; align-items: center; gap: 10px; }
+  .mu-vs em { font: italic 13px var(--serif); color: var(--faint); }
+
   /* ------------------------------------------------------------ historique */
   .log { display: flex; flex-direction: column; }
   .match { display: grid; grid-template-columns: 74px 110px minmax(120px, 1fr) auto auto 92px; align-items: center;
@@ -452,8 +496,11 @@
   <section id="tab-decks" hidden>
     <div class="kicker">Mes compositions</div>
     <h2 class="title" style="margin-top:10px">Decks joués <small>du plus joué au moins joué</small></h2>
+    <div class="deck-start" id="deck-start"></div>
     <div class="decks" id="decks"></div>
-    <h2 class="title">Cartes qui me réussissent <small>classées par victoires</small></h2>
+    <h2 class="title">Matchups <small>mon deck de départ contre chaque deck adverse</small></h2>
+    <div id="matchups"></div>
+    <h2 class="title">Cartes qui me réussissent <small>classées par victoires · moyennes par partie</small></h2>
     <div class="gallery" id="mycards"></div>
   </section>
 
@@ -641,7 +688,12 @@ let histMode = "all", histShown = HIST_PAGE, histData = [];
 try { const saved = localStorage.getItem("spam.histMode"); if (HIST_FILTERS[saved]) histMode = saved; } catch (e) { /* stockage indisponible */ }
 
 function matchRow(x) {
-  return h("div", { class: "match " + x.result },
+  const open = histOpen === x.uid;
+  const toggle = () => toggleDetail(x.uid);
+  return h("div", { class: "match " + x.result + (x.uid ? " clickable" : ""), "data-uid": x.uid || null,
+      tabindex: x.uid ? "0" : null, role: x.uid ? "button" : null, "aria-expanded": x.uid ? String(open) : null,
+      title: x.uid ? "Voir le détail du match" : null, onclick: x.uid ? toggle : null,
+      onkeydown: x.uid ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } } : null },
     h("div", { class: "date" }, day(x.start_utc), h("br"), hour(x.start_utc)),
     h("div", { class: "res" }, LABELS[x.result], h("span", { class: "mode-tag" }, x.mode_name)),
     h("div", { class: "who" }, x.opponent || "?", x.is_ai ? h("span", { class: "tag" }, "IA") : null,
@@ -651,6 +703,105 @@ function matchRow(x) {
       h("div", { class: "mini" }, byName(x.opp_deck).map(c => card(c, "xs")))),
     h("div", {}),
     h("div", { class: "num" }, h("b", {}, plural(x.turns ?? 0, "tour")), h("br"), dur(x.duration_s)));
+}
+
+// ---- detail d'un match (clic sur une ligne de l'historique)
+let histOpen = null;
+const detailCache = new Map();
+const fmtN = n => Number(n || 0).toLocaleString("fr-FR");
+function toggleDetail(uid) {
+  histOpen = histOpen === uid ? null : uid;
+  renderHistory(histData);
+  if (histOpen && !detailCache.has(uid)) {
+    fetch(`/api/match/${encodeURIComponent(uid)}`, { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(v => detailCache.set(uid, v))
+      .catch(() => detailCache.set(uid, { error: true }))
+      .finally(() => { if (histOpen === uid) renderHistory(histData); });
+  }
+}
+function minutes(ms) {
+  const s = Math.round((ms || 0) / 1000);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
+}
+function detailSide(title, key, s) {
+  const rows = s.cards.map(c => h("div", { class: "det-row" + (c.alive ? "" : " dead") },
+    card(c.info, "xs"),
+    h("div", { class: "nm" }, c.info.name || c.info.uuid.slice(0, 8),
+      c.mvp ? h("span", { class: "badge", title: "Carte qui a infligé le plus de dégâts du match" }, "MVP") : null,
+      c.alive ? null : h("span", { class: "badge out" }, "éliminée"),
+      h("small", {}, c.talent ? `Talent : ${c.talent}` : "Sans talent")),
+    h("div", { class: "v" }, fmtN(c.damage), h("small", {}, "dégâts")),
+    h("div", { class: "v" }, fmtN(c.heal), h("small", {}, "soins")),
+    h("div", { class: "v" }, c.kills, h("small", {}, "élim."))));
+  const buys = s.purchases.map(p => `${(p.info && p.info.name) || "?"} (${p.cost} pièces, tour ${p.turn})`);
+  const shop = [plural(s.shops, "boutique"), plural(s.rerolls, "relance"), plural(s.skips, "passe")];
+  if (s.bans) shop.push(plural(s.bans, "bannissement"));
+  return h("div", { class: "det-side", style: `--key: var(${key})` },
+    h("div", { class: "det-head" }, h("span", { class: "det-who" }, title),
+      h("span", { class: "muted" }, `${fmtN(s.damage)} dégâts · ${fmtN(s.heal)} soins`)),
+    rows,
+    h("div", { class: "det-note" }, buys.length ? `Tox achetés : ${buys.join(" · ")}` : "Aucun Tox acheté."),
+    h("div", { class: "det-note" }, `${shop.join(" · ")} · temps de jeu ${minutes(s.turn_time_ms)}` +
+      (s.timeouts ? ` · ${plural(s.timeouts, "temps dépassé")}` : "") + (s.disconnects ? ` · ${plural(s.disconnects, "déconnexion")}` : "")));
+}
+// Courbe des PV des deux joueurs, tour par tour (meme unite : un seul axe)
+function hpChart(me, opp) {
+  const n = Math.max(me.length, opp.length);
+  if (n < 2) return null;
+  const W = 760, H = 180, ML = 46, MR = 52, MT = 12, MB = 24;
+  const { hi, ticks } = niceTicks(0, Math.max(...me, ...opp, 1), 3);
+  const x = i => ML + i * (W - ML - MR) / (n - 1);
+  const y = v => MT + (hi - v) / hi * (H - MT - MB);
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "PV des deux joueurs à chaque tour" });
+  for (const t of ticks) svg.append(s("line", { x1: ML, x2: W - MR, y1: y(t), y2: y(t), stroke: "var(--chart-grid)" }),
+    s("text", { x: ML - 8, y: y(t) + 4, "text-anchor": "end" }, fmtN(t)));
+  const step = Math.max(1, Math.ceil((n - 1) / 8));
+  for (let i = 0; i < n; i += step) svg.append(s("text", { x: x(i), y: H - 6, "text-anchor": "middle" }, i === 0 ? "départ" : `T${i}`));
+  const cross = s("line", { y1: MT, y2: H - MB, stroke: "var(--hair-2)", opacity: 0 });
+  svg.append(cross);
+  const series = [[me, "var(--hp-me)"], [opp, "var(--hp-opp)"]];
+  for (const [vals, color] of series) {
+    if (!vals.length) continue;
+    svg.append(s("path", { d: vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(""),
+      fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const li = vals.length - 1;
+    svg.append(s("circle", { cx: x(li), cy: y(vals[li]), r: 4, fill: color, stroke: "var(--ink)", "stroke-width": 2 }),
+      s("text", { class: "end", x: x(li) + 9, y: y(vals[li]) + 4 }, fmtN(vals[li])));
+  }
+  const caption = h("div", { class: "hp-caption" }, "Survole la courbe pour voir les PV à chaque tour.");
+  const at = i => [`${i === 0 ? "Départ" : `Tour ${i}`} : `, h("b", {}, `${fmtN(me[i])} PV`), " pour toi · ",
+    h("b", {}, `${fmtN(opp[i])} PV`), " pour l'adversaire"];
+  svg.addEventListener("pointermove", e => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (W / r.width);
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - ML) / ((W - ML - MR) / (n - 1)))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 1);
+    caption.replaceChildren(...at(i));
+  });
+  svg.addEventListener("pointerleave", () => cross.setAttribute("opacity", 0));
+  return h("div", { class: "hp-box" },
+    h("div", { class: "hp-legend" }, h("span", {}, h("i", { style: "background: var(--hp-me)" }), "Toi"),
+      h("span", {}, h("i", { style: "background: var(--hp-opp)" }), "Adversaire"),
+      h("span", {}, "PV totaux de l'équipe, au début de chaque tour")),
+    svg, caption);
+}
+function detailPanel(x) {
+  const v = detailCache.get(x.uid);
+  if (!v) return h("div", { class: "detail" }, h("div", { class: "muted" }, "Chargement du détail..."));
+  if (v.error) return h("div", { class: "detail" }, h("div", { class: "muted" }, "Détail indisponible pour le moment."));
+  if (!v.available) return h("div", { class: "detail" }, h("div", { class: "muted" },
+    "Pas de détail pour ce match : le jeu ne garde les replays que de ses 10 derniers matchs, et celui-ci n'était plus disponible."));
+  const cause = v.end_cause === "surrender"
+    ? (v.result === "victoire" ? "L'adversaire a abandonné" : v.result === "defaite" ? "Tu as abandonné" : "Abandon")
+    : v.end_cause === "normal" ? "Fin normale" : (v.end_cause || "Fin inconnue");
+  return h("div", { class: "detail" },
+    h("div", { class: "det-facts" },
+      v.starter ? h("span", { class: "det-chip" }, v.starter === "me" ? "Tu as commencé" : "L'adversaire a commencé") : null,
+      h("span", { class: "det-chip" }, cause),
+      v.turns ? h("span", { class: "det-chip" }, plural(v.turns, "tour")) : null),
+    h("div", { class: "det-grid" }, detailSide("Toi", "--hp-me", v.me), detailSide(x.opponent || "Adversaire", "--hp-opp", v.opp)),
+    hpChart(v.me.hp || [], v.opp.hp || []));
 }
 
 function renderHistory(matches) {
@@ -676,7 +827,7 @@ function renderHistory(matches) {
 
   const rest = list.length - histShown;
   fill("log", list.length
-    ? h("div", {}, list.slice(0, histShown).map(matchRow),
+    ? h("div", {}, list.slice(0, histShown).flatMap(x => histOpen && x.uid === histOpen ? [matchRow(x), detailPanel(x)] : [matchRow(x)]),
         rest > 0 ? h("button", { class: "btn more", onclick: () => { histShown += 100; renderHistory(histData); } },
           `Afficher plus (${rest} restant${rest > 1 ? "s" : ""})`) : null)
     : h("div", { class: "empty" }, HIST_FILTERS[histMode].empty));
@@ -878,13 +1029,50 @@ function renderDecks(d) {
     h("div", {},
       h("div", { class: "rate" }, pct(x.winrate), h("small", {}, " %")),
       h("div", { class: "meta" }, h("b", {}, plural(x.games, "partie")), ` · ${x.victoire} V · ${x.defaite} D${x.egalite ? ` · ${x.egalite} N` : ""}`),
+      startParts(x).map(p => h("div", { class: "meta" }, p)),
       h("div", { class: "meter" + (x.winrate < 50 ? " bad" : "") }, h("b", { style: `width:${x.winrate}%` })))))) : h("div", { class: "empty" }, "Aucun deck joué pour l'instant."));
+
+  const st = startLine(d.summary);
+  fill("deck-start", st ? h("span", {}, "Toutes parties confondues : ", st) : "");
+  renderMatchups(d.matchups || []);
 
   fill("mycards", d.my_cards.length ? h("div", { style: "display:contents" }, d.my_cards.map(x => h("div", { class: "stat-card" },
     card(x.card, "md"),
     h("div", { class: "big" }, `${pct(x.winrate)} %`),
     h("div", { class: "sub" }, `${x.victoire} V sur ${plural(x.games, "partie")}`),
+    x.avg ? h("div", { class: "sub", title: `Moyenne sur ${plural(x.avg.games, "partie")} avec détail` },
+      `${fmtN(x.avg.damage)} dégâts · ${fmtN(x.avg.heal)} soins · ${x.avg.kills.toLocaleString("fr-FR")} élim.`) : null,
     h("div", { class: "nm" }, x.card.name || x.card.uuid.slice(0, 8))))) : h("div", { class: "empty" }, "Aucune carte jouée pour l'instant."));
+}
+
+// Taux de victoire selon qui a joue le premier tour
+function startParts(t) {
+  const parts = [];
+  if (t.first) parts.push(`Quand tu commences : ${pct(t.first.winrate)} % de victoires (${plural(t.first.games, "partie")})`);
+  if (t.second) parts.push(`Quand l'adversaire commence : ${pct(t.second.winrate)} % de victoires (${plural(t.second.games, "partie")})`);
+  return parts;
+}
+function startLine(t) { return startParts(t).join(" · "); }
+
+// Matchups : mon deck de depart contre chaque deck adverse de depart
+let muShown = 15;
+function renderMatchups(list) {
+  if (!list.length) { fill("matchups", h("div", { class: "empty" }, "Pas encore de matchup.")); return; }
+  const rest = list.length - muShown;
+  fill("matchups", h("div", {},
+    h("table", { class: "airy" },
+      h("thead", {}, h("tr", {}, h("th", {}, "Mon deck contre le deck adverse"), h("th", { class: "num" }, "Parties"),
+        h("th", { class: "num" }, "Bilan"), h("th", {}, "Taux de victoire"))),
+      h("tbody", {}, list.slice(0, muShown).map(m => h("tr", {},
+        h("td", {}, h("div", { class: "mu-vs" }, h("div", { class: "mini" }, byName(m.me).map(c => card(c, "xs"))),
+          h("em", {}, "vs"), h("div", { class: "mini" }, byName(m.opp).map(c => card(c, "xs"))))),
+        h("td", { class: "num" }, m.games),
+        h("td", { class: "num" }, h("span", { style: "color:var(--win)" }, `${m.victoire} V`), " · ",
+          h("span", { style: "color:var(--loss)" }, `${m.defaite} D`)),
+        h("td", {}, h("div", { class: "meter" + (m.winrate < 50 ? " bad" : ""), style: "margin:0 0 4px;max-width:160px" },
+          h("b", { style: `width:${m.winrate}%` })), `${pct(m.winrate)} %`))))),
+    rest > 0 ? h("button", { class: "btn more", onclick: () => { muShown += 30; renderMatchups(list); } },
+      `Afficher plus (${rest} restant${rest > 1 ? "s" : ""})`) : null));
 }
 
 // ------------------------------------------------------------ adversaires
