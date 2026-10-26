@@ -253,7 +253,12 @@ def interpretation(game_mode, my_stars, opp_stars):
 INTERP_COLUMNS = {"mode_name": "TEXT", "my_tier": "TEXT", "my_tier_stars": "INTEGER",
                   "opponent_tier": "TEXT", "opponent_tier_stars": "INTEGER", "interp_version": "INTEGER"}
 # colonnes brutes ajoutees apres la premiere version (vides pour les anciens matchs)
-EXTRA_RAW_COLUMNS = {"app_version": "TEXT"}
+EXTRA_RAW_COLUMNS = {"app_version": "TEXT",
+                     # decks de depart lus dans les replays (JSON). NULL = pas encore cherche, "[]" = introuvable
+                     "my_start_deck": "TEXT", "opponent_start_deck": "TEXT"}
+# Deck utilise partout dans l'app : celui de depart s'il est connu, sinon le deck de fin brut
+MY_DECK_SQL = "CASE WHEN my_start_deck NOT IN ('', '[]') THEN my_start_deck ELSE my_deck END"
+OPP_DECK_SQL = "CASE WHEN opponent_start_deck NOT IN ('', '[]') THEN opponent_start_deck ELSE opponent_deck END"
 
 
 def migrate(db):
@@ -406,6 +411,84 @@ def read_index(path):
 # et le ticket de connexion du match. Le resume de chaque match est conserve dans spam.db.
 
 
+# ---------------------------------------------------------------- decks de depart (replays .srpl)
+#
+# index.json donne les decks de FIN de match. Une carte peut se transformer pendant la partie
+# (ex. Aristocrate Nebulaire), ce qui eclaterait un meme deck en plusieurs. Le replay contient,
+# pour chaque joueur, un bloc qui commence par son identifiant puis ses cartes, chacune notee
+# <identifiant d'instance>\x02J<uuid de la carte> : les 4 premieres = son deck de depart.
+# Le replay est lu dans le dossier du jeu (lecture seule) tant que le jeu le conserve.
+
+SRPL_CARD_RE = re.compile(rb"(?<![A-Za-z0-9-])[A-Za-z0-9]{6,20}\x02J"
+                          rb"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+
+
+def start_decks(srpl_path, my_id, opp_id):
+    """(mon deck de depart, deck de depart adverse) lus dans le replay, ou None si introuvable.
+
+    Lecture seule ; seule la liste des cartes est gardee (jamais l'AccountId ni le ticket).
+    """
+    import gzip
+    try:
+        with gzip.open(srpl_path) as f:
+            raw = f.read(32_000_000)
+    except (OSError, EOFError, ValueError):
+        return None, None
+    events = [(m.start(), "card", m.group(1).decode()) for m in SRPL_CARD_RE.finditer(raw)]
+    for pid, who in ((my_id, "me"), (opp_id, "opp")):
+        if pid:
+            events += [(m.start(), who, None) for m in re.finditer(re.escape(pid.encode()), raw)]
+    events.sort(key=lambda e: e[0])
+    decks, cur, cards = {}, None, []
+    for _, kind, uid in events + [(len(raw), "end", None)]:
+        if kind == "card":
+            if cur:
+                cards.append(uid)
+            continue
+        if cur and cur not in decks and len(cards) >= 4:
+            decks[cur] = cards[:4]           # premier bloc complet de ce joueur
+        cur, cards = (kind if kind in ("me", "opp") else None), []
+    return decks.get("me"), decks.get("opp")
+
+
+def fill_start_decks(db, index_path):
+    """Complete le deck de depart des matchs qui ne l'ont pas encore. Renvoie le nombre traite."""
+    todo = db.execute("SELECT game_uid, opponent_id, my_deck, opponent_deck FROM matches "
+                      "WHERE my_start_deck IS NULL").fetchall()
+    if not todo:
+        return 0
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    entries = [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
+    in_index = {m.get("GameUid") for m in entries}
+    my_id = next((m["AccountId"] for m in entries if m.get("AccountId")), None)   # en memoire seulement
+    if not my_id:
+        return 0
+
+    def plausible(deck, end_json):   # une ou deux cartes peuvent se transformer, pas tout le deck
+        return bool(deck) and len(set(deck) & set(json.loads(end_json or "[]"))) >= 2
+
+    done = 0
+    for uid, opp_id, my_end, opp_end in todo:
+        if not GAME_UID_RE.match(uid or ""):
+            continue
+        src = index_path.parent / f"{uid}.srpl"
+        if not src.exists():
+            if uid not in in_index:   # replay supprime par le jeu : on garde le deck de fin
+                db.execute("UPDATE matches SET my_start_deck = '[]', opponent_start_deck = '[]' "
+                           "WHERE game_uid = ?", (uid,))
+            continue                  # sinon le jeu ne l'a pas encore ecrit : nouvel essai plus tard
+        me, opp = start_decks(src, my_id, opp_id)
+        db.execute("UPDATE matches SET my_start_deck = ?, opponent_start_deck = ? WHERE game_uid = ?",
+                   (json.dumps(me) if plausible(me, my_end) else "[]",
+                    json.dumps(opp) if plausible(opp, opp_end) else "[]", uid))
+        done += 1
+    db.commit()
+    return done
+
+
 # ---------------------------------------------------------------- catalogue des cartes
 
 CATALOG = {}          # uuid -> nom, rempli par load_catalog()
@@ -542,6 +625,9 @@ def watch(stop=None):
                     stop.wait(POLL_SECONDS)
                     continue  # on garde l'ancien mtime pour reessayer
                 last_mtime = mtime
+                filled = fill_start_decks(db, index_path)
+                if filled and first_sync:
+                    print(f"Decks de depart retrouves dans les replays pour {filled} match(s).")
 
                 if first_sync:
                     # Import initial : resume, sans compter dans la session
@@ -614,7 +700,7 @@ def stats():
     for name, n, w, l in top:
         print(f"  {name:<20} {n} partie(s)  ({w}V {l}D)")
 
-    last = db.execute("SELECT my_deck FROM matches ORDER BY start_utc DESC LIMIT 1").fetchone()
+    last = db.execute(f"SELECT {MY_DECK_SQL} FROM matches ORDER BY start_utc DESC LIMIT 1").fetchone()
     print(f"Dernier deck joue : {deck_label(last[0])}")
     warn_unknown(u for (d,) in db.execute("SELECT my_deck || opponent_deck FROM matches")
                  for u in re.findall(r"[0-9a-f-]{36}", d))
@@ -627,7 +713,7 @@ def deck_stats():
         print("Aucune base pour l'instant : lance d'abord 'python tracker.py'.")
         return
     db = open_db()
-    rows = db.execute("SELECT my_deck, opponent_deck, result FROM matches").fetchall()
+    rows = db.execute(f"SELECT {MY_DECK_SQL}, {OPP_DECK_SQL}, result FROM matches").fetchall()
     if not rows:
         print("Aucun match en base.")
         return
@@ -748,10 +834,10 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
         rows = db.execute("""
             SELECT start_utc, duration_s, opponent_id, opponent_name, opponent_is_ai,
                    opponent_rank, opponent_stars, my_rank, my_stars, result, turns,
-                   my_deck, opponent_deck, game_mode, mode_name,
+                   {MY_DECK_SQL}, {OPP_DECK_SQL}, game_mode, mode_name,
                    my_tier, my_tier_stars, opponent_tier, opponent_tier_stars
             FROM matches ORDER BY start_utc DESC
-        """).fetchall()
+        """.format(MY_DECK_SQL=MY_DECK_SQL, OPP_DECK_SQL=OPP_DECK_SQL)).fetchall()
     finally:
         db.close()
 
