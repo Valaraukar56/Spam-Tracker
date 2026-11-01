@@ -310,6 +310,15 @@
     padding: 1px 7px; border-radius: 999px; }
   .seg[aria-selected="true"] .seg-n { color: var(--paper); }
   .more { display: block; margin: 18px auto 0; }
+  /* mois : un reset des rangs a lieu chaque mois, d'ou un bilan mensuel */
+  .month-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 18px; }
+  .mchip { background: var(--ink-2); border: 1px solid var(--hair); border-radius: 10px; cursor: pointer;
+    padding: 7px 12px 8px; text-align: left; color: var(--muted); font: inherit; transition: border-color .2s, background .2s; }
+  .mchip:hover { border-color: var(--hair-2); }
+  .mchip[aria-selected="true"] { border-color: var(--brass-dim); background: rgba(216, 180, 106, .08); }
+  .mchip-t { display: block; font: 600 12px var(--display); letter-spacing: 1.4px; text-transform: uppercase; color: var(--paper); }
+  .mchip[aria-selected="true"] .mchip-t { color: var(--brass); }
+  .mchip-s { display: block; font-size: 12px; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .rail { overflow-y: auto; scrollbar-width: none; }   /* 5 onglets : defile si la fenetre est tres basse */
   .rail::-webkit-scrollbar { display: none; }
 
@@ -490,6 +499,7 @@
     <div class="kicker">Toutes mes parties</div>
     <h2 class="title" style="margin-top:10px">Historique <small id="hist-summary"></small></h2>
     <div class="seg-bar" id="hist-filter" role="tablist" aria-label="Filtrer par mode"></div>
+    <div class="month-bar" id="hist-months" role="tablist" aria-label="Filtrer par mois"></div>
     <div class="log" id="log"></div>
   </section>
 
@@ -684,8 +694,11 @@ const HIST_FILTERS = {
   ranked: { label: "Classé", test: m => m.mode === 10, empty: "Aucune partie classée pour l'instant." },
 };
 const HIST_PAGE = 50;
-let histMode = "all", histShown = HIST_PAGE, histData = [];
-try { const saved = localStorage.getItem("spam.histMode"); if (HIST_FILTERS[saved]) histMode = saved; } catch (e) { /* stockage indisponible */ }
+let histMode = "all", histShown = HIST_PAGE, histData = [], histMonth = "all";
+try {
+  const saved = localStorage.getItem("spam.histMode"); if (HIST_FILTERS[saved]) histMode = saved;
+  const month = localStorage.getItem("spam.histMonth"); if (month) histMonth = month;
+} catch (e) { /* stockage indisponible */ }
 
 function matchRow(x) {
   const open = histOpen === x.uid;
@@ -804,6 +817,44 @@ function detailPanel(x) {
     hpChart(v.me.hp || [], v.opp.hp || []));
 }
 
+// ---- bilan par mois (les rangs sont remis a zero chaque mois)
+const fmtMonth = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
+function monthKey(s) {
+  const d = parseDate(s);
+  return d && !isNaN(d) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "?";
+}
+function monthLabel(k) {
+  const [y, m] = k.split("-").map(Number);
+  return y && m ? fmtMonth.format(new Date(y, m - 1, 1)) : "Date inconnue";
+}
+function renderMonths(list) {
+  const months = new Map();                // "AAAA-MM" -> bilan (la liste va du plus recent au plus ancien)
+  for (const m of list) {
+    const k = monthKey(m.start_utc);
+    const e = months.get(k) || { all: 0, games: 0, wins: 0, last: m };
+    e.all += 1;
+    if (!m.is_ai) { e.games += 1; if (m.result === "victoire") e.wins += 1; }
+    months.set(k, e);
+  }
+  if (histMonth !== "all" && !months.has(histMonth)) histMonth = "all";
+  if (months.size === 0) { fill("hist-months"); return; }
+  const pick = k => {
+    histMonth = k; histShown = HIST_PAGE;
+    try { localStorage.setItem("spam.histMonth", k); } catch (e) { /* sans importance */ }
+    renderHistory(histData);
+  };
+  const sub = e => (e.games ? `${plural(e.games, "partie")} · ${pct(100 * e.wins / e.games)} % de victoires` : `${plural(e.all, "partie")} contre l'IA`);
+  const chip = (k, title, text, tip) => h("button", { class: "mchip", role: "tab", "aria-selected": String(histMonth === k),
+    title: tip || null, onclick: () => pick(k) }, h("span", { class: "mchip-t" }, title), h("span", { class: "mchip-s" }, text));
+  const total = { all: list.length, games: list.filter(m => !m.is_ai).length, wins: list.filter(m => !m.is_ai && m.result === "victoire").length };
+  fill("hist-months", chip("all", "Tous les mois", sub(total)),
+    ...[...months.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([k, e]) => {
+      // en Classe : rang au debut de la derniere partie du mois (= rang atteint ce mois-la)
+      const rank = histMode === "ranked" && e.last.me && e.last.me.tier_name ? ` · ${e.last.me.tier_name}` : "";
+      return chip(k, monthLabel(k), sub(e) + rank, rank ? "Rang au début de ta dernière partie classée du mois" : null);
+    }));
+}
+
 function renderHistory(matches) {
   histData = matches;
   const setMode = k => {
@@ -815,15 +866,17 @@ function renderHistory(matches) {
     h("button", { class: "seg", role: "tab", "aria-selected": String(k === histMode), onclick: () => setMode(k) },
       f.label, h("span", { class: "seg-n" }, matches.filter(f.test).length))));
 
-  const list = matches.filter(HIST_FILTERS[histMode].test);
+  const byMode = matches.filter(HIST_FILTERS[histMode].test);
+  renderMonths(byMode);
+  const list = histMonth === "all" ? byMode : byMode.filter(m => monthKey(m.start_utc) === histMonth);
   // bilan de la vue : les parties contre l'IA sont listees mais hors bilan
   const humans = list.filter(m => !m.is_ai), bots = list.length - humans.length;
   const w = humans.filter(m => m.result === "victoire").length, l = humans.filter(m => m.result === "defaite").length;
   const dr = humans.length - w - l;
-  fill("hist-summary", humans.length
+  fill("hist-summary", (histMonth === "all" ? "" : `${monthLabel(histMonth)} · `) + (humans.length
     ? `${plural(humans.length, "partie")} · ${w} V · ${l} D${dr ? ` · ${dr} N` : ""} · ${pct(100 * w / humans.length)} % de victoires` +
       (bots ? ` · + ${bots} contre l'IA, hors bilan` : "")
-    : bots ? `${plural(bots, "partie")} contre l'IA` : "");
+    : bots ? `${plural(bots, "partie")} contre l'IA` : ""));
 
   const rest = list.length - histShown;
   fill("log", list.length
