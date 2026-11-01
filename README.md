@@ -96,7 +96,7 @@ Autres outils pour les curieux :
   au moins être lancé avant d'avoir joué 10 nouvelles parties, sinon les plus anciennes sont perdues.
   Active "Lancer au démarrage de Windows" pour ne pas y penser.
 - **La préparation des cartes peut casser après une mise à jour du jeu.** Le format interne des
-  cartes a été décodé à la main pour la version **1.26** du jeu. L'application affiche un
+  cartes a été décodé à la main et vérifié pour la version **1.28.1** du jeu. L'application affiche un
   avertissement si la version change. Sans catalogue, elle reste utilisable : les cartes
   s'affichent alors par leur identifiant.
 - **Windows uniquement** (10 et 11).

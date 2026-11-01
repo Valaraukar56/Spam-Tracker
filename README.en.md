@@ -86,7 +86,7 @@ Extra tools: `python tracker.py stats`, `python tracker.py decks`,
   least started before you play 10 new games, otherwise older ones are lost. Enable "start with
   Windows" so you don't have to think about it.
 - **Card extraction may break after a game update.** The internal card format was decoded by hand
-  for game version **1.26**. The app warns you if the version changes. Without a catalog it still
+  and verified for game version **1.28.1**. The app warns you if the version changes. Without a catalog it still
   works and cards are shown by their identifier.
 - **Windows only** (10 and 11).
 - **Not decoded**: move-by-move replay content (`.srpl`), ability descriptions, and one numeric card

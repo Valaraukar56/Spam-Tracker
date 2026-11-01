@@ -70,7 +70,7 @@ CATALOG_PATH = BASE_DIR / "catalog.json"
 SETTINGS_PATH = BASE_DIR / "settings.json"
 
 # Version du jeu pour laquelle le decodage du catalogue a ete verifie (AppVersion des replays)
-TESTED_GAME_VERSION = "1.26"
+TESTED_GAME_VERSION = "1.28.1"
 SPAM_APP_ID = "2902720"   # AppID Steam de SPAM
 
 
@@ -201,7 +201,7 @@ GAME_UID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # ---------------------------------------------------------------- rangs et modes (donnees du jeu)
 #
 # Source : Assembly-CSharp.dll (Spam.Data.RankData, TcgEngine.GameMode) et resources.assets
-# (7 RankData, traductions Rank.*), version 1.26 du jeu.
+# (7 RankData, traductions Rank.*), versions 1.26 et 1.28.1 du jeu.
 # - "stars" = etoiles du mode Classe. Rang = premier palier dont etoiles <= seuil, Legende au-dela.
 # - Dans chaque rang il y a 15 etoiles a remplir (RankData.FilledStars) ; Legende n'a pas de suite :
 #   le jeu y affiche la position au classement a la place.

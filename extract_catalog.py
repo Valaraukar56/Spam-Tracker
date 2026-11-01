@@ -16,7 +16,7 @@ d'erreur. Aucune connexion reseau.
 
 Le jeu est compile sans "typetrees" : UnityPy ne sait pas decoder les
 ScriptableObjects du jeu tout seul. On lit donc les octets bruts de CardData en
-suivant l'ordre des champs, deduit par analyse du fichier (version 1.26 du jeu).
+suivant l'ordre des champs, deduit par analyse du fichier (versions 1.26 et 1.28.1 du jeu).
 Les textures (Texture2D) sont un type Unity standard que UnityPy decode directement.
 """
 
@@ -36,7 +36,7 @@ ASSET_FILES = ["resources.assets", "globalgamemanagers.assets"]
 RESS_FILE = "resources.assets.resS"          # pixels des textures (~2,4 Go), seulement pour les images
 THUMB_W, THUMB_H = 200, 285                   # ratio des illustrations du jeu (516 x 736)
 FREE_SPACE_MARGIN = 300 * 1024 * 1024         # marge disque en plus des copies
-TESTED_GAME_VERSION = "1.26"
+TESTED_GAME_VERSION = "1.28.1"
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 ILLUSTRATION_RE = re.compile(rb"Sprites/Card/Illustration/[A-Za-z0-9_]+")

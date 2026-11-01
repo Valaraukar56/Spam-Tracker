@@ -154,8 +154,8 @@ def main(target):
     for c in cards.values():
         c["image"] = True
     (data / "catalog.json").write_text(json.dumps({
-        "generated_utc": "2026-01-01T12:00:00+00:00", "source": "demo", "game_version": "1.26",
-        "tested_with": "1.26", "count": len(cards), "cards": cards, "talents": TALENTS},
+        "generated_utc": "2026-01-01T12:00:00+00:00", "source": "demo", "game_version": "1.28.1",
+        "tested_with": "1.28.1", "count": len(cards), "cards": cards, "talents": TALENTS},
         ensure_ascii=False, indent=1), encoding="utf-8")
 
     ids = list(cards)
@@ -184,7 +184,7 @@ def main(target):
         write_srpl(folder / f"{uid}.srpl", {"GameUid": uid, "AccountId": ME, "OpponentId": opp_id},
                    [(ME, my_deck), (opp_id, opp_deck)], fake_summary(rnd, uid, ME, opp_id, my_deck, opp_deck, win, turns))
         matches.append({
-            "FormatVersion": 2, "AppVersion": "1.26", "GameUid": uid,
+            "FormatVersion": 2, "AppVersion": "1.28.1", "GameUid": uid,
             "AccountId": ME, "Seat": 0, "GameMode": 10 if ranked else 0, "Level": "",
             "OpponentId": opp_id, "OpponentName": "IA d'entraînement" if ai else OPPONENTS[n % 8],
             "OpponentIsAi": ai, "WinnerId": ME if win else opp_id, "IsDraw": False,

@@ -1,4 +1,4 @@
-# Versions avec lesquelles SPAM Tracker 1.0.0 a ete compile et teste (Python 3.13, Windows 11)
+# Versions avec lesquelles SPAM Tracker 1.0.1 a ete compile et teste (Python 3.13, Windows 11)
 pywebview==6.2.1
 pystray==0.19.5
 pillow==13.0.0
