@@ -1115,11 +1115,11 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             "first": with_rate(by_start["me"]), "second": with_rate(by_start["opp"]),
         },
         "recent": matches[:recent_limit],
-        # evolution de mes etoiles et de ma position au classement (au debut de chaque match)
+        # evolution de ma position au classement (au debut de chaque match), filtree par saison dans l'interface
         "progress": [{"t": m["start_utc"], "placement": m["me"]["placement"], "stars": m["me"]["stars"],
                       "tier": m["me"]["tier"], "tier_name": m["me"]["tier_name"], "mode_name": m["mode_name"],
                       "result": m["result"], "opponent": m["opponent"], "is_ai": m["is_ai"]}
-                     for m in reversed(matches)][-300:],
+                     for m in reversed(matches)],
         "decks": sorted(({"cards": [card_info(u) for u in k], **t, "winrate": rate(t),
                           "first": with_rate(starts.get((k, "me"))), "second": with_rate(starts.get((k, "opp")))}
                          for k, t in decks.items()), key=lambda d: (-d["games"], -d["winrate"])),

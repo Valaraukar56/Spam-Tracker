@@ -166,7 +166,7 @@ def main(target):
     folder = target / "replays" / "demo.server" / ME
     folder.mkdir(parents=True, exist_ok=True)
     rnd = random.Random(7)
-    start = datetime(2026, 1, 10, 18, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 10, 31, 21, 30, tzinfo=timezone.utc)   # a cheval sur les saisons 1 et 2
     my_stars, my_rank, matches = 64, 1480, []
     for n in range(14):
         ranked = n >= 4                        # les 4 premiers en Normal, puis du Classe

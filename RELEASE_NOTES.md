@@ -1,22 +1,24 @@
-# SPAM Tracker 1.0.1
+# SPAM Tracker 1.0.2
 
-Compatible avec la version **1.28.1** de SPAM (nouvelle extension). / Compatible with SPAM **1.28.1**.
+Saisons et graphique dans l'historique. / Seasons and chart in the history.
 
 ## Français
 
 **Nouveautés**
-- Extraction des cartes vérifiée pour la version **1.28.1** du jeu : les cartes de la nouvelle
-  extension s'affichent avec leur nom, leur illustration, leurs PV, leur élément, leur rareté et
-  leurs talents.
-- Le bandeau « version du jeu différente » n'apparaît plus en 1.28.1.
-- Les rangs (Bronze à Légende) ont été revérifiés : leurs seuils n'ont pas changé.
+- **Historique par saison** : les rangs sont remis à zéro chaque mois, chaque mois est donc une saison
+  (Saison 1 = octobre 2026, Saison 2 = novembre 2026, etc.). Sous les filtres Toutes / Normal /
+  Classé, une case par saison indique le nombre de parties et le % de victoires. En Classé, elle
+  affiche aussi le rang atteint pendant la saison.
+- Un clic sur une saison n'affiche que ses parties, avec son bilan (victoires, défaites, % de
+  victoires). « Toutes les saisons » revient à l'historique complet. La saison choisie est retenue.
+- Les saisons suivent le calendrier, à l'heure de ton PC. Le mois correspondant s'affiche au survol.
+- **Le graphique de progression passe dans l'historique** : bouton **Graphique** à droite des filtres.
+  La courbe de ta position au classement suit la saison choisie, et couvre désormais toutes tes
+  parties (elle s'arrêtait aux 300 dernières).
 
-**Après la mise à jour**
-1. Remplace `SPAM-Tracker.exe` par la nouvelle version, dans le même dossier (tes matchs sont
-   conservés).
-2. Ouvre **Réglages > Préparer les cartes** pour ajouter les cartes de l'extension.
-
-Les matchs enregistrés avant la mise à jour restent reconnus.
+**Mise à jour**
+Remplace `SPAM-Tracker.exe` par la nouvelle version, dans le même dossier : tes matchs et tes cartes
+sont conservés, rien d'autre à faire.
 
 **Rappel** : aucune connexion réseau sortante, aucune lecture de la mémoire du jeu, aucun fichier
 du jeu modifié. L'AccountId et le ticket de connexion ne sont ni enregistrés ni affichés.
@@ -28,13 +30,16 @@ Projet de fan non affilié à Ticroco. Aucun contenu du jeu n'est inclus.
 
 ## English
 
-- Card extraction verified for game version **1.28.1**: cards from the new expansion show their
-  name, artwork, HP, element, rarity and talents. No more "game version differs" banner on 1.28.1.
-- Rank thresholds (Bronze to Legend) re-checked: unchanged.
-- To update: replace `SPAM-Tracker.exe` in the same folder (your matches are kept), then click
-  **Réglages > Préparer les cartes** to add the new cards.
+- **History by season**: ranks reset every month, so each month is a season (Season 1 = October
+  2026, Season 2 = November 2026, and so on). Below the All / Casual / Ranked filters, one chip per
+  season shows the number of games and the win rate; in Ranked, also the rank reached.
+- Click a season to list only its games, with its summary. "Toutes les saisons" shows everything
+  again. Seasons follow the calendar, in your PC's time zone.
+- **The progression chart moves to the history**: "Graphique" button, right of the filters. It
+  follows the selected season and now covers all your games (it used to stop at the last 300).
+- To update: replace `SPAM-Tracker.exe` in the same folder (matches and cards are kept).
 
 [Installation guide](https://github.com/Valaraukar56/Spam-Tracker/blob/main/docs/INSTALLATION.en.md).
 Unofficial fan project, not affiliated with Ticroco. No game content is included.
 
-**SHA-256** (`SPAM-Tracker.exe`) : `ca713229b81413569675706d9ef8e44108455b4c20407fb1e604c5de2935e926`
+**SHA-256** (`SPAM-Tracker.exe`) : `72679ba4cf8592636b4152736ea4a155c0a5112358ed081e6ac759747e1bf9b4`

@@ -10,7 +10,7 @@ adversaires, rang et évolution au classement, dans une application de bureau.
 > leurs artistes. **Aucun contenu du jeu n'est distribué dans ce dépôt** : les noms et illustrations
 > des cartes sont extraits sur ton ordinateur, depuis ta propre installation du jeu.
 
-![Accueil : le dernier match, le bilan et la progression](docs/screenshots/home.png)
+![Accueil : le dernier match et le bilan](docs/screenshots/home.png)
 
 *Captures réalisées avec des données de démonstration entièrement fictives (pseudos, cartes et
 illustrations inventés).*
@@ -20,9 +20,10 @@ illustrations inventés).*
 - **Enregistre chaque match** dès qu'il se termine : résultat, mode (Normal, Classé...), decks des deux
   joueurs, nombre de tours, durée, adversaire, rang.
 - **Garde tout l'historique** dans une base locale. Le jeu, lui, ne conserve que tes 10 derniers matchs.
-- **Accueil** : le dernier match en face-à-face, ton bilan, ta série en cours, ta forme récente et
-  l'évolution de ta position au classement.
-- **Historique** : toutes tes parties, avec un filtre Toutes / Normal / Classé. Un clic sur une partie
+- **Accueil** : le dernier match en face-à-face, ton bilan, ta série en cours, et ta forme récente.
+- **Historique** : toutes tes parties, avec un filtre Toutes / Normal / Classé et un bilan par saison
+  (une saison = un mois, entre deux resets des rangs : parties, % de victoires et rang atteint).
+  Le bouton **Graphique** affiche l'évolution de ta position au classement sur la saison choisie. Un clic sur une partie
   affiche son détail : qui a commencé, comment elle s'est terminée, les dégâts, soins et éliminations
   de chaque carte, les talents, les achats en partie et la courbe des PV des deux joueurs.
 - **Decks** : tes decks (regroupés par cartes de départ, même si une carte se transforme en cours de

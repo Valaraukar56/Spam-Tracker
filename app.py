@@ -35,7 +35,7 @@ ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 # requete CORS prealable, que ce serveur ne valide jamais.
 CSRF_HEADER = "X-SPAM-Tracker"
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 DATA_DIR = tracker.BASE_DIR                                  # a cote de l'exe
 RES_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))  # ui.html embarque
 LOG_PATH = DATA_DIR / "tracker.log"

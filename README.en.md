@@ -10,7 +10,7 @@ rank and leaderboard position, in a desktop app.
 > is distributed in this repository**: card names and illustrations are extracted on your own
 > computer, from your own installation of the game.
 
-![Home: last match, record and progression](docs/screenshots/home.png)
+![Home: last match and record](docs/screenshots/home.png)
 
 *Screenshots made with fully fictional demo data (made-up players, cards and artwork). The
 interface is in French.*
@@ -20,8 +20,10 @@ interface is in French.*
 - **Records every match** as soon as it ends: result, mode (Casual, Ranked...), both decks, turns,
   duration, opponent, rank.
 - **Keeps your whole history** in a local database. The game itself only keeps your last 10 matches.
-- **Home**: last match face-off, record, current streak, recent form and leaderboard position chart.
-- **History**: all your games, filtered by All / Casual / Ranked. Click a game to see its details: who
+- **Home**: last match face-off, record, current streak and recent form.
+- **History**: all your games, filtered by All / Casual / Ranked, with a summary per season
+  (one season = one month, between two rank resets: games, win rate and rank reached).
+  The **Graphique** button shows your leaderboard position over the selected season. Click a game to see its details: who
   started, how it ended, damage, healing and kills of each card, talents, in-game purchases and the HP
   chart of both players.
 - **Decks**: your decks (grouped by starting cards, even when a card transforms during the game), win
