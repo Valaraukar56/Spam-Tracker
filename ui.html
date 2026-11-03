@@ -95,7 +95,9 @@
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(111, 220, 156, .5); } 70%, 100% { box-shadow: 0 0 0 9px rgba(111, 220, 156, 0); } }
 
   /* ------------------------------------------------------------ mise en page */
-  main { margin-left: var(--rail); padding: 26px clamp(18px, 3vw, 44px) 60px; max-width: 1320px;
+  body { padding-left: var(--rail); }
+  /* le contenu se centre dans l'espace a droite du rail (plein ecran 1920 x 1080 compris) */
+  main { margin: 0 auto; padding: 26px clamp(18px, 3vw, 44px) 60px; max-width: 1560px;
     overflow-x: clip; /* la donne part du centre : jamais de barre horizontale pendant l'animation */ }
   section[hidden] { display: none; }
   section.enter { animation: rise .45s var(--ease) both; }
@@ -169,7 +171,7 @@
   .ph .nm { font: 600 calc(var(--w) * .11)/1.1 var(--serif); color: var(--paper); position: relative; }
   .ph .uid { font: calc(var(--w) * .075) Consolas, monospace; color: var(--brass); }
   /* tailles */
-  .card.xl { --w: clamp(96px, 9.4vw, 142px); }
+  .card.xl { --w: clamp(96px, 9.4vw, 172px); }
   .card.md { --w: 112px; }
   .card.sm { --w: 82px; }
   .card.xs { --w: 34px; border-radius: 4px; padding: 1.5px; }
@@ -471,6 +473,15 @@
     .match { grid-template-columns: 70px 1fr auto; }
     .match .versus, .match .num:last-child { grid-column: 1 / -1; }
     .decks { grid-template-columns: 1fr; }
+  }
+  /* grands ecrans : l'accueil occupe la hauteur de la fenetre au lieu de rester colle en haut */
+  @media (min-width: 1061px) and (min-height: 820px) {
+    #tab-home:not([hidden]) { min-height: calc(100vh - 86px); display: flex; flex-direction: column; justify-content: center; }
+  }
+  @media (min-width: 1600px) {
+    .board .v { font-size: 54px; }
+    .board > div { padding: 20px 24px 18px; }
+    .verdict .opp { font-size: 34px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
