@@ -23,7 +23,7 @@ illustrations inventés).*
 - **Accueil** : le dernier match en face-à-face, ton bilan, ta série en cours, et ta forme récente.
 - **Historique** : toutes tes parties, avec un filtre Toutes / Normal / Classé et un bilan par saison
   (une saison = un mois, entre deux resets des rangs : parties, % de victoires et rang atteint).
-  Le bouton **Graphique** affiche l'évolution de ta position au classement sur la saison choisie. Un clic sur une partie
+  Le bouton **Graphique** affiche l'évolution de ta position au classement et de ton % de victoires sur la saison choisie. Un clic sur une partie
   affiche son détail : qui a commencé, comment elle s'est terminée, les dégâts, soins et éliminations
   de chaque carte, les talents, les achats en partie et la courbe des PV des deux joueurs.
 - **Decks** : tes decks (regroupés par cartes de départ, même si une carte se transforme en cours de

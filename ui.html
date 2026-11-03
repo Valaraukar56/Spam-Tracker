@@ -265,6 +265,8 @@
   .prog .dot { fill: var(--chart-line); stroke: var(--ink); stroke-width: 2; }
   .prog .dot.on { r: 5.5; }
   .prog .grid { stroke: var(--chart-grid); stroke-width: 1; }
+  .prog .grid.ref { stroke: var(--hair-2); stroke-dasharray: 4 4; }
+  .prog .chart-head + svg + .chart-head { margin-top: 22px; }
   .prog .cross { stroke: var(--hair-2); stroke-width: 1; opacity: 0; }
   .prog.hover .cross { opacity: 1; }
   .draw .line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawl 1.1s .2s var(--ease) forwards; }
@@ -527,7 +529,7 @@
     </div>
     <div class="month-bar" id="hist-months" role="tablist" aria-label="Filtrer par saison"></div>
     <div id="hist-graph" hidden>
-      <div class="graph-head">Position au classement, au début de chaque match
+      <div class="graph-head">Position au classement et % de victoires, au début de chaque match
         <button class="btn" id="prog-toggle" aria-pressed="false">Tableau</button></div>
       <div id="progress"></div>
     </div>
@@ -963,7 +965,13 @@ let progData = [], progTable = false, progAnimate = false;
 function renderProgress(all, animate) {
   progData = all; progAnimate = animate;
   // la courbe suit la saison choisie dans l'historique
-  const points = histMonth === "all" ? all : all.filter(p => monthKey(p.t) === histMonth);
+  let points = histMonth === "all" ? all : all.filter(p => monthKey(p.t) === histMonth);
+  // % de victoires cumule sur la periode affichee (les parties contre l'IA ne comptent pas, comme dans le bilan)
+  let games = 0, wins = 0;
+  points = points.map(p => {
+    if (!p.is_ai) { games += 1; if (p.result === "victoire") wins += 1; }
+    return { ...p, wr: games ? Math.round(100 * wins / games) : null };
+  });
   const box = document.getElementById("progress");
   const btn = document.getElementById("prog-toggle");
   btn.setAttribute("aria-pressed", progTable);
@@ -981,7 +989,8 @@ function renderProgress(all, animate) {
   const x = i => (n === 1 ? ML + (W - ML - MR) / 2 : ML + i * (W - ML - MR) / (n - 1));
   const showDots = n <= 60;
   const series = [
-    { key: "placement", name: "Classement", unit: "place", prefix: "n° ", invert: true, H: 200, axis: true },
+    { key: "placement", name: "Classement", unit: "place", prefix: "n° ", suffix: "", invert: true, H: 200, axis: false },
+    { key: "wr", name: "% de victoires", unit: "point", prefix: "", suffix: " %", invert: false, H: 170, axis: true, ref: 50 },
   ];
   // le rang ne bouge qu'en mode Classe : on le dit si aucun match classe n'est affiche
   const ranked = points.filter(p => p.mode_name === "Classé").length;
@@ -1007,11 +1016,13 @@ function renderProgress(all, animate) {
       : `${better ? "en hausse" : "en baisse"} de `;
     // a cote de la position : mon rang actuel (dernier point connu)
     const lastTier = [...points].reverse().find(p => p.tier);
-    head.append(...[h("span", { class: "now" }, `${se.prefix}${last}`),
-      lastTier ? rankPill({ tier: lastTier.tier, tier_name: lastTier.tier_name }) : null,
+    head.append(...[h("span", { class: "now" }, `${se.prefix}${last}${se.suffix}`),
+      se.key === "placement" && lastTier ? rankPill({ tier: lastTier.tier, tier_name: lastTier.tier_name }) : null,
+      se.key === "wr" ? h("span", { class: "delta" }, h("b", {}, `${wins} V`), ` sur ${plural(games, "partie")}`) :
       h("span", { class: "delta" }, deltaTxt, diff === 0 ? null : h("b", {}, `${Math.abs(diff)} ${se.unit}${Math.abs(diff) > 1 ? "s" : ""}`),
         diff === 0 ? null : " depuis le premier match")].filter(Boolean));
-    const { lo, hi, ticks } = niceTicks(Math.min(...known), Math.max(...known), 3);
+    let { lo, hi, ticks } = niceTicks(Math.min(...known), Math.max(...known), 3);
+    if (se.key === "wr") { lo = Math.max(0, lo); hi = Math.min(100, hi); ticks = ticks.filter(t => t >= lo && t <= hi); }
     const y = v => se.invert ? top + (v - lo) / (hi - lo) * ph : top + (hi - v) / (hi - lo) * ph;
 
     const svg = s("svg", { viewBox: `0 0 ${W} ${se.H}`, height: se.H, role: "img", "aria-label": `${se.name} : ${first} au premier match, ${last} au dernier` });
@@ -1020,8 +1031,10 @@ function renderProgress(all, animate) {
       s("stop", { offset: "1", "stop-color": "#b38c44", "stop-opacity": "0" }))));
     for (const t of ticks) {
       svg.append(s("line", { class: "grid", x1: ML, x2: W - MR, y1: y(t), y2: y(t) }),
-        s("text", { x: ML - 10, y: y(t) + 4, "text-anchor": "end" }, t));
+        s("text", { x: ML - 10, y: y(t) + 4, "text-anchor": "end" }, se.suffix ? `${t}%` : t));
     }
+    // repere a 50 % : au-dessus, plus de victoires que de defaites
+    if (se.ref != null && se.ref > lo && se.ref < hi) svg.append(s("line", { class: "grid ref", x1: ML, x2: W - MR, y1: y(se.ref), y2: y(se.ref) }));
     // trace par segments (un trou si une valeur manque)
     let d = "", area = "", segStart = null;
     vals.forEach((v, i) => {
@@ -1039,7 +1052,7 @@ function renderProgress(all, animate) {
       : s("circle", { class: "dot", cx: x(i), cy: y(v), r: 4 }));
     dots.forEach(c => c && svg.append(c));
     // valeur en bout de courbe (texte en encre normale, jamais couleur de serie)
-    svg.append(s("text", { class: "end", x: x(lastI) + 10, y: y(last) + 4 }, last));
+    svg.append(s("text", { class: "end", x: x(lastI) + 10, y: y(last) + 4 }, se.suffix ? `${last}%` : last));
     if (se.axis) {
       // etiquettes espacees d'au moins GAP px ; le dernier match est toujours etiquete
       const GAP = 96, idx = [];
@@ -1075,6 +1088,7 @@ function renderProgress(all, animate) {
       h("div", { class: "when" }, `Match ${i + 1} sur ${n} · ${day(p.t)} à ${hour(p.t)}`),
       h("div", { class: "row" }, h("i"), h("b", {}, p.placement != null ? `n° ${p.placement}` : "-"), "au classement"),
       h("div", { class: "row" }, h("i"), h("b", {}, p.tier_name || "-"), "rang"),
+      h("div", { class: "row" }, h("i"), h("b", {}, p.wr != null ? `${p.wr} %` : "-"), "de victoires à ce stade"),
       h("div", { class: "when" }, `Mode ${p.mode_name || "?"}${p.is_ai ? " · contre l'IA" : ""}`),
       h("div", { class: "res" }, h("span", {}, LABELS[p.result] || "?"), ` contre ${p.opponent || "?"}`));
     ctip.classList.add("on");
@@ -1112,7 +1126,7 @@ function renderProgress(all, animate) {
 function progressTable(points) {
   return h("table", { class: "airy" },
     h("thead", {}, h("tr", {}, h("th", { class: "num" }, "Match"), h("th", {}, "Date"), h("th", {}, "Mode"),
-      h("th", { class: "num" }, "Classement"), h("th", {}, "Rang"),
+      h("th", { class: "num" }, "Classement"), h("th", {}, "Rang"), h("th", { class: "num" }, "% de victoires"),
       h("th", {}, "Résultat"), h("th", {}, "Adversaire"))),
     h("tbody", {}, points.map((p, i) => ({ p, i })).reverse().map(({ p, i }) => h("tr", {},
       h("td", { class: "num muted" }, i + 1),
@@ -1120,6 +1134,7 @@ function progressTable(points) {
       h("td", { class: "muted" }, p.mode_name || "?"),
       h("td", { class: "num" }, p.placement != null ? `n° ${p.placement}` : "-"),
       h("td", {}, p.tier ? rankPill({ tier: p.tier, tier_name: p.tier_name }) : "-"),
+      h("td", { class: "num" }, p.wr != null ? `${p.wr} %` : "-"),
       h("td", { class: p.result, style: "color:var(--rc)" }, LABELS[p.result] || "?"),
       h("td", { class: "nm" }, p.opponent || "?")))));
 }

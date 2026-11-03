@@ -23,7 +23,7 @@ interface is in French.*
 - **Home**: last match face-off, record, current streak and recent form.
 - **History**: all your games, filtered by All / Casual / Ranked, with a summary per season
   (one season = one month, between two rank resets: games, win rate and rank reached).
-  The **Graphique** button shows your leaderboard position over the selected season. Click a game to see its details: who
+  The **Graphique** button shows your leaderboard position and win rate over the selected season. Click a game to see its details: who
   started, how it ended, damage, healing and kills of each card, talents, in-game purchases and the HP
   chart of both players.
 - **Decks**: your decks (grouped by starting cards, even when a card transforms during the game), win
