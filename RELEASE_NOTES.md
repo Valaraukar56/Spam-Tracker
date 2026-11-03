@@ -22,6 +22,10 @@ Saisons et graphique dans l'historique. / Seasons and chart in the history.
 - **Historique plus lisible** : lignes de match plus grandes (cartes, résultat, adversaire). Dans une
   fenêtre étroite, les cartes passent sous le résultat.
 
+**Correction**
+- **Rang de l'accueil** : il montrait le rang au début de ta dernière partie classée. Il tient compte
+  maintenant de son résultat (une victoire en haut de Céleste te fait passer Légende, par exemple).
+
 **Mise à jour**
 Remplace `SPAM-Tracker.exe` par la nouvelle version, dans le même dossier : tes matchs et tes cartes
 sont conservés, rien d'autre à faire.
@@ -47,9 +51,10 @@ Projet de fan non affilié à Ticroco. Aucun contenu du jeu n'est inclus.
 - **Large screens**: in full screen (e.g. 1920 x 1080), pages are centered and the home page fills
   the window height.
 - **Bigger history rows**: larger cards and text; in a narrow window, cards go below the result.
+- **Fix**: the home rank now accounts for the result of your last ranked game (it showed the rank at its start).
 - To update: replace `SPAM-Tracker.exe` in the same folder (matches and cards are kept).
 
 [Installation guide](https://github.com/Valaraukar56/Spam-Tracker/blob/main/docs/INSTALLATION.en.md).
 Unofficial fan project, not affiliated with Ticroco. No game content is included.
 
-**SHA-256** (`SPAM-Tracker.exe`) : `fd3eeb03e4dc4c82f44ad9a36abc40c255bc61c17fabc0045b78efe7456c4a08`
+**SHA-256** (`SPAM-Tracker.exe`) : `d8068859e8f728190cdcfebd09506b178de7bb8e4d5c288a2c4c4c976ec99180`

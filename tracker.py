@@ -222,6 +222,21 @@ GAME_MODES = {0: "Normal", 10: "Classé", 15: "Debug", 20: "Tutoriel", 25: "Prem
               30: "Entraînement", 40: "Amis", 50: "Duel en équipe", 60: "Tournoi", 70: "Battleground"}
 
 
+def stars_after(stars, result):
+    """Etoiles estimees apres un match classe : +1 par victoire, -1 par defaite.
+
+    Constate sur 269 enchainements de matchs classes (267 conformes). Une defaite au premier
+    palier de Legende ne fait pas redescendre (constate une fois) : on ne passe pas sous ce palier.
+    """
+    if stars is None:
+        return None
+    delta = {"victoire": 1, "defaite": -1}.get(result, 0)
+    legend_floor = RANKS[-2][0] + 1
+    if delta < 0 and stars == legend_floor:
+        return stars
+    return max(0, stars + delta)
+
+
 def rank_from_stars(stars):
     """(identifiant, nom, etoiles remplies dans le rang 0-15) d'apres les etoiles, comme le jeu."""
     if stars is None:
@@ -1014,6 +1029,14 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
         return {"stars": stars, "placement": placement, "tier": tier,
                 "tier_name": RANK_NAMES.get(tier), "tier_stars": tier_stars}
 
+    def current_standing(ms):
+        last = next((m for m in ms if m["mode"] == 10 and not m["is_ai"] and m["me"]["stars"] is not None), None)
+        if not last:
+            return ms[0]["me"] if ms else None
+        stars = stars_after(last["me"]["stars"], last["result"])
+        tier, _, tier_stars = rank_from_stars(stars)
+        return standing(stars, last["me"]["placement"], tier, tier_stars)
+
     matches = []
     for r in rows:
         matches.append({
@@ -1109,8 +1132,8 @@ def dashboard_data(recent_limit=5000):   # tout l'historique (onglet Historique)
             "by_mode": [{"mode": k, **v, "winrate": rate(v)} for k, v in by_mode.items()],
             "ranked_games": sum(1 for m in humans if m["mode"] == 10),
             "bots": record(bots) | {"winrate": rate(record(bots))},
-            # mon dernier etat connu (rang calcule depuis les etoiles + position au classement)
-            "me": matches[0]["me"] if matches else None,
+            # mon rang apres ma derniere partie classee (position au classement : celle du debut du match)
+            "me": current_standing(matches),
             # taux de victoire quand je commence / quand l'adversaire commence
             "first": with_rate(by_start["me"]), "second": with_rate(by_start["opp"]),
         },
