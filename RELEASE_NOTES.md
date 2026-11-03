@@ -17,6 +17,8 @@ Saisons et graphique dans l'historique. / Seasons and chart in the history.
   parties (elle s'arrêtait aux 300 dernières).
 - **Grand écran** : en plein écran (1920 x 1080 par exemple), les pages sont centrées et l'accueil
   occupe toute la hauteur au lieu de rester collé en haut à gauche.
+- **Historique plus lisible** : lignes de match plus grandes (cartes, résultat, adversaire). Dans une
+  fenêtre étroite, les cartes passent sous le résultat.
 
 **Mise à jour**
 Remplace `SPAM-Tracker.exe` par la nouvelle version, dans le même dossier : tes matchs et tes cartes
@@ -41,9 +43,10 @@ Projet de fan non affilié à Ticroco. Aucun contenu du jeu n'est inclus.
   follows the selected season and now covers all your games (it used to stop at the last 300).
 - **Large screens**: in full screen (e.g. 1920 x 1080), pages are centered and the home page fills
   the window height.
+- **Bigger history rows**: larger cards and text; in a narrow window, cards go below the result.
 - To update: replace `SPAM-Tracker.exe` in the same folder (matches and cards are kept).
 
 [Installation guide](https://github.com/Valaraukar56/Spam-Tracker/blob/main/docs/INSTALLATION.en.md).
 Unofficial fan project, not affiliated with Ticroco. No game content is included.
 
-**SHA-256** (`SPAM-Tracker.exe`) : `dd99342ae2f8e7e8d6ac7391a5d9dfd051df3438c5c194851ad6c6af09fb5933`
+**SHA-256** (`SPAM-Tracker.exe`) : `f353012ef1ee89cdb251cf1d083322c5e87656238ed8e09b1acfd5cb081589f6`

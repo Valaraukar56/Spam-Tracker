@@ -377,21 +377,24 @@
 
   /* ------------------------------------------------------------ historique */
   .log { display: flex; flex-direction: column; }
-  .match { display: grid; grid-template-columns: 74px 110px minmax(120px, 1fr) auto auto 92px; align-items: center;
-    gap: 18px; padding: 12px 14px 12px 16px; border-bottom: 1px solid var(--hair); position: relative;
+  .match { display: grid; grid-template-columns: 84px 130px minmax(140px, 1fr) auto auto 100px; align-items: center;
+    gap: 22px; padding: 18px 18px 18px 20px; border-bottom: 1px solid var(--hair); position: relative;
     transition: background .2s; }
   .match::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px; border-radius: 2px; background: var(--rc); }
   .match:hover { background: linear-gradient(90deg, rgba(255, 255, 255, .025), transparent); }
-  .match .date { color: var(--muted); font-size: 12.5px; line-height: 1.3; font-variant-numeric: tabular-nums; }
-  .match .res { font: 600 19px var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
+  .match .date { color: var(--muted); font-size: 14px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .match .res { font: 600 24px var(--display); font-variation-settings: "wdth" 75; font-stretch: condensed;
     letter-spacing: 1.2px; text-transform: uppercase; color: var(--rc); }
-  .match .who { font: 500 17px/1.2 var(--serif); overflow-wrap: anywhere; }
-  .match .who small { display: block; font: 12px var(--display); color: var(--muted); letter-spacing: .3px; }
+  .match .who { font: 500 20px/1.2 var(--serif); overflow-wrap: anywhere; }
+  .match .who small { display: block; margin-top: 3px; font: 13px var(--display); color: var(--muted); letter-spacing: .3px; }
   .mini { display: flex; gap: 4px; }
-  .versus { display: flex; align-items: center; gap: 10px; }
-  .versus em { font: italic 13px var(--serif); color: var(--faint); }
-  .match .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
-  .match .num b { color: var(--paper); font-weight: 500; font-size: 14px; }
+  .versus { display: flex; align-items: center; gap: 14px; }
+  .versus em { font: italic 15px var(--serif); color: var(--faint); }
+  /* cartes des lignes de l'historique : plus grandes que les miniatures du reste de l'appli */
+  .match .mini { gap: 6px; }
+  .match .card.xs { --w: clamp(46px, 3.4vw, 66px); border-radius: 5px; padding: 2px; }
+  .match .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; line-height: 1.4; }
+  .match .num b { color: var(--paper); font-weight: 500; font-size: 16px; }
   .victoire { --rc: var(--win); } .defaite { --rc: var(--loss); } .egalite { --rc: var(--draw); }
 
   /* ------------------------------------------------------------ decks */
@@ -463,6 +466,13 @@
   .pill.bad { color: var(--brass); background: rgba(216, 180, 106, .12); }
 
   /* ------------------------------------------------------------ petits ecrans */
+  /* lignes de l'historique : version compacte (cartes sur une seconde ligne) sous 1180 px */
+  @media (max-width: 1180px) {
+    .match { grid-template-columns: 78px 130px 1fr auto; row-gap: 14px; }
+    .match > div:nth-child(5) { display: none; }
+    .match .num:last-child { grid-column: 4; grid-row: 1; }
+    .match .versus { grid-column: 2 / -1; grid-row: 2; }
+  }
   @media (max-width: 1060px) {
     .duel { grid-template-columns: 1fr; justify-items: center; }
     .duel .verdict { order: -1; }
@@ -470,8 +480,6 @@
     .hand { grid-template-columns: repeat(4, auto); }
     .board { grid-template-columns: repeat(2, 1fr); }
     .board > div:last-child { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--hair); }
-    .match { grid-template-columns: 70px 1fr auto; }
-    .match .versus, .match .num:last-child { grid-column: 1 / -1; }
     .decks { grid-template-columns: 1fr; }
   }
   /* grands ecrans : l'accueil occupe la hauteur de la fenetre au lieu de rester colle en haut */
